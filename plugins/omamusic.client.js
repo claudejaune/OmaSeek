@@ -14,6 +14,8 @@
  * kept at `assets/icons/transport.json` and served by the Host half — play,
  * always shown when paused; pause, hidden while playing and lifted by hover
  * — and unlike the site's volume fade this card pauses the track for real.
+ * The meter, too, is a switch of its own: a click holds the bars frozen,
+ * sound and progress carrying on regardless.
  *
  * The bytes arrive from this Package's Host half: metadata and album art in
  * one call, the MP3 in base64 windows stitched into a Blob URL. Browsers
@@ -100,9 +102,21 @@ var CSS = [
   '.omamusic:has(.omamusic-seek:hover) .omamusic-readout,.omamusic:has(.omamusic-seek:active) .omamusic-readout,',
   '.omamusic:has(.omamusic-seek:focus-visible) .omamusic-readout{opacity:1}',
   // The four-level meter, brand-colored, driven per frame outside React.
-  '.omamusic-meter{display:flex;align-items:flex-end;gap:2px;width:18px;margin-right:12px;',
-  'align-self:center;height:12px;flex:none}',
+  // It is also the visualization's switch: a click holds the bars where
+  // they are, a second lets them run again.
+  '.omamusic-meter{display:flex;align-items:flex-end;gap:2px;width:18px;height:12px;flex:none;',
+  'align-self:center;position:relative;padding:10px 12px 10px 10px;margin:-10px 2px -10px -10px;',
+  'border:none;background:transparent;border-radius:4px}',
+  '.omamusic-meter:hover{background:rgba(128,128,128,.12)}',
   '.omamusic-bar{display:block;width:3px;flex:none;height:2px;background:var(--dsw-alias-brand-primary)}',
+  // The switch's own tooltip, hung over the meter: a second of hover
+  // before it fades up, and it says which way the next click goes.
+  '.omamusic-viz-tip{position:absolute;left:50%;bottom:calc(100% + 8px);transform:translateX(-50%);',
+  'padding:6px 8px;border:1px solid var(--dsw-alias-border-l1);',
+  'background:var(--dsw-specific-tip, var(--dsw-alias-bg-overlay));',
+  'box-shadow:0 4px 16px rgba(0,0,0,.25);opacity:0;pointer-events:none;white-space:nowrap;',
+  'font-size:11px;color:var(--dsw-alias-label-primary);transition:opacity .15s ease-out}',
+  '.omamusic-meter:hover .omamusic-viz-tip{opacity:1;transition-delay:1s}',
   // Progress line along the foot, seek line over it: no thumb, the end of
   // the line is the handle.
   '.omamusic-line{position:absolute;left:0;right:0;bottom:0;height:2px;transform-origin:left;',
@@ -197,6 +211,10 @@ return {
     /** paused | loading | playing | failed. */
     var state = 'paused'
     var touched = false
+
+    /** Whether the meter is held by hand — clicking it freezes, clicking
+     *  again lets it run. Sound and progress carry on either way. */
+    var vizPaused = false
 
     var subs = []
     function announce() {
@@ -478,7 +496,8 @@ return {
 
       // Progress line, seek value, readout and meter: driven straight from
       // the track each frame, outside React, so the card never re-renders
-      // for them. While a hand is on the range, the range leads.
+      // for them. While a hand is on the range, the range leads. The
+      // meter's own frame work is skipped while it is held by its switch.
       React.useEffect(function () {
         var levels = new Float32Array(METER_BARS)
         var smoothed = new Float32Array(METER_BARS)
@@ -495,13 +514,15 @@ return {
               readoutRef.current.textContent = clock(timeNow()) + ' / ' + clock(duration)
             }
           }
-          meter(levels)
-          for (var i = 0; i < METER_BARS; i += 1) {
-            var rise = levels[i] > smoothed[i]
-            smoothed[i] += (levels[i] - smoothed[i]) * (rise ? 0.7 : 0.2)
-            var bar = barsRef.current[i]
-            if (bar) {
-              bar.style.height = Math.max(1, Math.round(smoothed[i] * METER_STEPS)) * 2 + 'px'
+          if (!vizPaused) {
+            meter(levels)
+            for (var i = 0; i < METER_BARS; i += 1) {
+              var rise = levels[i] > smoothed[i]
+              smoothed[i] += (levels[i] - smoothed[i]) * (rise ? 0.7 : 0.2)
+              var bar = barsRef.current[i]
+              if (bar) {
+                bar.style.height = Math.max(1, Math.round(smoothed[i] * METER_STEPS)) * 2 + 'px'
+              }
             }
           }
         }
@@ -583,14 +604,26 @@ return {
           h('span', { className: 'omamusic-byline' },
             h('span', { className: 'omamusic-artist' }, TRACK.artist),
             h('span', { 'aria-hidden': 'true', ref: readoutRef, className: 'omamusic-readout' }))),
-        h('span', { 'aria-hidden': 'true', className: 'omamusic-meter' },
+        h('button', {
+          type: 'button',
+          className: 'omamusic-meter',
+          'aria-pressed': vizPaused,
+          'aria-label': vizPaused ? 'Resume visualization' : 'Pause visualization',
+          onClick: function () {
+            if (dragMoved.current) return
+            vizPaused = !vizPaused
+            announce()
+          },
+        },
           [0, 1, 2, 3].map(function (i) {
             return h('span', {
               key: i,
               ref: function (el) { barsRef.current[i] = el },
               className: 'omamusic-bar',
             })
-          })),
+          }),
+          h('span', { className: 'omamusic-viz-tip', 'aria-hidden': 'true' },
+            vizPaused ? 'Resume visualization' : 'Pause visualization')),
         h('span', {
           'aria-hidden': 'true', ref: lineRef, className: 'omamusic-line',
           style: { transform: 'scaleX(0)' },
