@@ -12,3 +12,7 @@ dist/
 *.log
 npm-debug.log*
 pnpm-debug.log*
+
+# Todo and refs
+TODO.md
+references/

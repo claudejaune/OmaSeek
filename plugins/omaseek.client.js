@@ -91,6 +91,33 @@ function tokensFor(p) {
   return tokens
 }
 
+/**
+ * Corner-shape sheets, the Omarchy half of the look.
+ *
+ * DeepSeek Harness has no radius token — every component hard-codes its own
+ * `border-radius`. But it *does* route corner shape through one token:
+ * `ui-theme`'s `corner-shape.css` declares
+ * `* { corner-shape: var(--dsw-corner-shape) }` at `superellipse(1.5)`, and
+ * every genuinely round control (avatar 50%, tag/send/attach 999px, the Switch
+ * capsule) opts itself out with an explicit `corner-shape: round`.
+ *
+ * So `square` — which the spec defines as `superellipse(infinity)`, i.e. a
+ * 90-degree corner whatever the radius — squares every rectangle while those
+ * explicit opt-outs keep their circles. For the brutalist reading, the `all`
+ * sheet forces the corner through with `!important`, which is also what
+ * flattens the pills, the Switch capsule and the avatars.
+ *
+ * `corner-shape` is Chrome/Edge 139+; the guard leaves other engines exactly
+ * as they were, and `.omaseek-warn` surfaces that rather than silently
+ * doing nothing.
+ */
+var CORNER_SHEET = {
+  square: '@supports (corner-shape: square){:root{--dsw-corner-shape:square!important}}',
+  all: '@supports (corner-shape: square){*,*::before,*::after{corner-shape:square!important}}',
+}
+
+var CORNER_LABELS = { harness: 'Harness', square: 'Square', all: 'Square everything' }
+
 var CSS = [
   '.omaseek{display:flex;flex-direction:column;gap:20px;max-width:1000px}',
   '.omaseek-title{font-size:16px;font-weight:600;color:var(--dsw-alias-label-primary)}',
@@ -119,8 +146,12 @@ var CSS = [
   'color:var(--dsw-alias-label-primary)}',
   '.omaseek-tag{font-size:10px;color:var(--dsw-alias-label-tertiary)}',
   '.omaseek-note{font-size:11px;line-height:1.6;color:var(--dsw-alias-label-tertiary);max-width:62ch}',
+  '.omaseek-warn{display:none;font-size:11px;line-height:1.6;color:var(--dsw-alias-state-warn-primary);max-width:62ch}',
   '.omaseek-error{font-size:12px;line-height:1.5;padding:10px 12px;border-radius:8px;white-space:pre-wrap;',
   'border:1px solid var(--dsw-alias-state-error-primary);color:var(--dsw-alias-state-error-primary)}',
+  // Feature test in CSS: the Client half has no `document` to ask, so the
+  // warning is hidden here and revealed only where corner-shape is missing.
+  '@supports not (corner-shape: square){.omaseek-warn{display:block}}',
 ].join('\n')
 
 /** createElement shorthand — this Package is not compiled, so no JSX. */
@@ -138,7 +169,7 @@ return {
 
     // Package-local store: the palettes arrive asynchronously from the Host,
     // and the Settings page subscribes instead of polling.
-    var state = { entries: [], error: '', loading: true }
+    var state = { entries: [], error: '', loading: true, corners: 'harness' }
     var subs = []
     function notify() {
       for (var i = 0; i < subs.length; i += 1) subs[i]()
@@ -151,7 +182,23 @@ return {
       }
     }
 
+    // Corner shape lives outside the Settings page: it restyles the whole
+    // harness, so it stays applied after the page closes. One owned sheet,
+    // swapped rather than stacked.
+    var cornerOff = null
+    function setCorners(mode) {
+      if (cornerOff !== null) { cornerOff(); cornerOff = null }
+      state.corners = mode
+      if (CORNER_SHEET[mode] !== undefined) cornerOff = styles.insert(CORNER_SHEET[mode])
+      notify()
+    }
+
     ctx.effect(function () { return styles.insert(CSS) }, 'omaseek: styles')
+    ctx.effect(function () {
+      // The style tags go with the run anyway; this disposes the corner sheet
+      // on its own too, so an update that never set a corner mode is clean.
+      return function () { if (cornerOff !== null) cornerOff() }
+    }, 'omaseek: corner sheet')
 
     ctx.effect(function () {
       var live = true
@@ -280,10 +327,33 @@ return {
               snapshot.active.id === entry.id ? h('span', { className: 'omaseek-tag' }, 'active') : null))
         })))
 
+      children.push(h('div', { key: 'corners', className: 'omaseek-row' },
+        h('span', { className: 'omaseek-legend' }, 'Corners'),
+        ['harness', 'square', 'all'].map(function (mode) {
+          return h('button', {
+            key: mode,
+            className: 'omaseek-chip',
+            type: 'button',
+            'data-on': state.corners === mode ? '1' : '0',
+            onClick: function () { setCorners(mode) },
+          }, CORNER_LABELS[mode])
+        })))
+
+      children.push(h('div', {
+        key: 'corner-note',
+        className: state.corners === 'harness' ? 'omaseek-note' : 'omaseek-warn',
+      }, state.corners === 'harness'
+        ? 'Harness keeps its superellipse(1.5) corners. Square uses corner-shape on the'
+          + ' radius each component already chose, so avatars, tags, the send control and the'
+          + ' Switch capsule stay round; Square everything overrides those opt-outs too.'
+        : 'This browser has no corner-shape (Chrome or Edge 139+), so the corner setting'
+          + ' has no effect here. DeepSeek Harness ships the same guard for its own'
+          + ' superellipse corners.'))
+
       children.push(h('div', { key: 'note', className: 'omaseek-note' },
-        'Palettes are read from themes.md and live for this harness process only \u2014 a reload falls back '
-        + 'to the Appearance preference saved in General. Corner radii are not themeable in DeepSeek '
-        + 'Harness, so they stay as shipped.'))
+        'Palettes are read from themes.md and live for this harness process only \u2014 a reload falls '
+        + 'back to the Appearance preference saved in General, and so do the palette and corner '
+        + 'choices, which are deliberately not persisted.'))
 
       return h('div', { className: 'omaseek' }, children)
     }
