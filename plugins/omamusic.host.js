@@ -12,15 +12,26 @@
  * Plain JavaScript only (no import/require/TS). `fs` is an optional Service.
  */
 
+/**
+ * The plugin's own files, shipped in the workspace proper — never under
+ * `references/`, which is vendored source and does not travel with a public
+ * offering. One folder per kind: `assets/music` for the sound, `assets/icons`
+ * for the borrowed transport glyphs.
+ */
+var ASSETS = './assets'
+
 /** The single track, exactly as omarchy.org ships it on its home page. */
-var MUSIC_DIR = './references/omarchy-site/public/music'
+var MUSIC_DIR = ASSETS + '/music'
 var TRACK = {
   title: 'We Can Fix Everything (The Ultimate Machine)',
   artist: 'Kevin Koontz',
   mp3: MUSIC_DIR + '/kevin_koontz-we_can_fix_everything.mp3',
   art: MUSIC_DIR + '/kevin_koontz-we_can_fix_everything.webp',
-  timeline: './references/omarchy-site/src/data/track.json',
+  timeline: MUSIC_DIR + '/track.json',
 }
+
+/** The play/pause lattice, from radio.omarchy.org's bitmap icon set. */
+var TRANSPORT_ICONS = ASSETS + '/icons/transport.json'
 
 /** Max bytes per `omamusic.chunk` window. */
 var CHUNK_MAX = 1 << 20
@@ -66,12 +77,22 @@ return {
         var info = await fs.stat(mp3Target)
         var artBytes = await fs.readBytes(artTarget, undefined, 1 << 20)
         var timeline = JSON.parse(await fs.readText(timelineTarget))
+        // The transport glyphs travel with the meta. If the file went
+        // missing, the Client keeps its inlined copy of the same cells.
+        var icons = null
+        try {
+          var iconTarget = await fs.resolve(TRANSPORT_ICONS)
+          icons = JSON.parse(await fs.readText(iconTarget))
+        } catch (missing) {
+          console.error('omamusic: transport icons not found, using inlined cells')
+        }
         meta = {
           title: TRACK.title,
           artist: TRACK.artist,
           size: info !== undefined && typeof info.size === 'number' ? info.size : 0,
           art: 'data:image/webp;base64,' + b64(artBytes),
           timeline: timeline,
+          icons: icons,
         }
         console.log('omamusic: served track meta, ' + meta.size + ' bytes of mp3')
         return meta

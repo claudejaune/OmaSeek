@@ -9,11 +9,11 @@
  * is ever asked for, the analysed-timeline bands while paused, the live
  * Web-Audio read when it is playing, the seek whose handle is just the end
  * of the painted line, the brand ring pulsing on the untouched art: all
- * ported from `src/lib/music.ts` and `MusicControl.tsx` of the site's
- * sources kept under `references/omarchy-site`. The transport glyph is from
- * radio.omarchy.org's bitmap icon set — play, always shown when paused;
- * pause, hidden while playing and lifted by hover — and unlike the site's
- * volume fade this card pauses the track for real.
+ * ported from `src/lib/music.ts` and `MusicControl.tsx` of the site's own
+ * sources. The transport glyph is from radio.omarchy.org's bitmap icon set,
+ * kept at `assets/icons/transport.json` and served by the Host half — play,
+ * always shown when paused; pause, hidden while playing and lifted by hover
+ * — and unlike the site's volume fade this card pauses the track for real.
  *
  * The bytes arrive from this Package's Host half: metadata and album art in
  * one call, the MP3 in base64 windows stitched into a Blob URL. Browsers
@@ -122,7 +122,9 @@ var CSS = [
   'background:var(--dsw-specific-tip, var(--dsw-alias-bg-overlay));',
   'box-shadow:0 4px 16px rgba(0,0,0,.25);opacity:0;pointer-events:none;white-space:nowrap;',
   'transition:opacity .15s ease-out}',
-  '.omamusic:hover .omamusic-tip{opacity:1}',
+  // The tip lingers a moment before it appears — 1.5 s of hover, then the
+  // same fade; leaving unpainted, it fades out at once.
+  '.omamusic:hover .omamusic-tip{opacity:1;transition-delay:1.5s}',
   '.omamusic-tip-title{font-size:12px;font-weight:500;color:var(--dsw-alias-label-primary)}',
   '.omamusic-tip-artist{font-size:11px;color:var(--dsw-alias-label-secondary)}',
 ].join('\n')
@@ -135,20 +137,26 @@ function h(type, props) {
 }
 
 /**
- * Transport glyphs borrowed from radio.omarchy.org (src/lib/icons.ts):
- * stepped pixel art on a 12x10 lattice, one cell to one CSS pixel, so the
- * steps land on the pixel grid and crispEdges keeps them there. Scaled x2
- * for this card. Play: the BIG triangle; Pause: two 3x10 bars.
+ * Transport glyphs borrowed from radio.omarchy.org (src/lib/icons.ts) and
+ * kept as this plugin's own file at `assets/icons/transport.json`, which the
+ * Host half serves inside `omamusic.meta`; the cells below are the inlined
+ * copy of that file, the fallback if it is missing. Stepped pixel art on a
+ * 12x10 lattice, one cell to one CSS pixel, so the steps land on the pixel
+ * grid and crispEdges keeps them there. Play: the BIG triangle; Pause: two
+ * 3x10 bars.
  */
-var SCALE = 2
+var SCALE = 1
 var PLAY_CELLS = [
   [1, 0, 2, 1], [1, 1, 4, 1], [1, 2, 6, 1], [1, 3, 8, 1], [1, 4, 10, 1],
   [1, 5, 10, 1], [1, 6, 8, 1], [1, 7, 6, 1], [1, 8, 4, 1], [1, 9, 2, 1],
 ]
 var PAUSE_CELLS = [[2, 0, 3, 10], [7, 0, 3, 10]]
 
+/** Replaced with the file's cells the moment the meta — and icons — arrive. */
+var GLYPHS = { play: PLAY_CELLS, pause: PAUSE_CELLS }
+
 function transportIcon(on) {
-  var cells = on ? PAUSE_CELLS : PLAY_CELLS
+  var cells = on ? GLYPHS.pause : GLYPHS.play
   var rects = []
   for (var i = 0; i < cells.length; i += 1) {
     rects.push(h('rect', { key: i, x: cells[i][0], y: cells[i][1], width: cells[i][2], height: cells[i][3] }))
@@ -402,6 +410,10 @@ return {
       host.call('omamusic.meta').then(function (result) {
         if (!alive) return
         meta = result
+        if (result.icons !== null && result.icons !== undefined
+            && result.icons.play && result.icons.pause) {
+          GLYPHS = { play: result.icons.play.cells, pause: result.icons.pause.cells }
+        }
         var tl = result.timeline
         duration = tl.duration
         fps = tl.fps
