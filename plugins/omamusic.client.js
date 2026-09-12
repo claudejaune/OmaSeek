@@ -103,9 +103,15 @@ var CSS = [
   '.omamusic:has(.omamusic-seek:focus-visible) .omamusic-readout{opacity:1}',
   // The four-level meter, brand-colored, driven per frame outside React.
   // It is also the visualization's switch: a click holds the bars where
-  // they are, a second lets them run again.
-  '.omamusic-meter{display:flex;align-items:flex-end;gap:2px;width:18px;height:12px;flex:none;',
-  'align-self:center;position:relative;padding:10px 12px 10px 10px;margin:-10px 2px -10px -10px;',
+  // they are, a second lets them run again. The padding is the switch's
+  // roomy hit area, pulled back by an equal negative margin so the bars
+  // sit exactly where the bare span used to. A <button> is border-box by
+  // the UA default — unlike the span it replaced, it would swallow this
+  // padding into the 18px width and spill the unshrinkable bars past the
+  // card's right edge, so the width is put back on the content box.
+  '.omamusic-meter{display:flex;align-items:flex-end;gap:2px;box-sizing:content-box;',
+  'width:18px;height:12px;flex:none;',
+  'align-self:center;position:relative;padding:10px 12px 10px 10px;margin:-10px 0 -10px -10px;',
   'border:none;background:transparent;border-radius:4px}',
   '.omamusic-meter:hover{background:rgba(128,128,128,.12)}',
   '.omamusic-bar{display:block;width:3px;flex:none;height:2px;background:var(--dsw-alias-brand-primary)}',
