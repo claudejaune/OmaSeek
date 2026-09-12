@@ -6,16 +6,19 @@
  * `shell.overlay`, and a drag anywhere but the seek line moves it. It is
  * otherwise the site's player, not a homage — the state machine, the silent
  * clock that keeps the meter and the progress line moving before the sound
- * is ever asked for, the analysed-timeline bands while muted, the live
- * Web-Audio read when it is on, the volume fade, the seek whose handle is
- * just the end of the painted line, the brand ring pulsing on the untouched
- * art: all ported from `src/lib/music.ts` and `MusicControl.tsx` of the
- * site's sources kept under `references/omarchy-site`.
+ * is ever asked for, the analysed-timeline bands while paused, the live
+ * Web-Audio read when it is playing, the seek whose handle is just the end
+ * of the painted line, the brand ring pulsing on the untouched art: all
+ * ported from `src/lib/music.ts` and `MusicControl.tsx` of the site's
+ * sources kept under `references/omarchy-site`. The transport glyph is from
+ * radio.omarchy.org's bitmap icon set — play, always shown when paused;
+ * pause, hidden while playing and lifted by hover — and unlike the site's
+ * volume fade this card pauses the track for real.
  *
  * The bytes arrive from this Package's Host half: metadata and album art in
  * one call, the MP3 in base64 windows stitched into a Blob URL. Browsers
- * will not autoplay sound without a gesture, so the card starts the way the
- * site does — muted, ring pulsing, one click from the sound.
+ * will not autoplay sound without a gesture, so the card starts paused —
+ * ring pulsing, one click from the sound.
  *
  * Plain JavaScript only (no import/require/JSX/TS).
  */
@@ -131,16 +134,29 @@ function h(type, props) {
   return React.createElement.apply(null, [type, props].concat(children))
 }
 
-/** The two volume glyphs, paths straight from the site's icon set. */
-var VOL_ON = 'M19.2478 4.75216C21.1027 6.60704 22.25 9.16954 22.25 12C22.25 14.8305 21.1027 17.393 19.2478 19.2478M15.8891 8.11091C16.8844 9.10622 17.5 10.4812 17.5 12C17.5 13.5188 16.8844 14.8938 15.8891 15.8891M1.75 7.75H6L12.25 4.25V19.75L6 16.25H1.75V7.75Z'
-var VOL_OFF = 'M21.5 10L19.3787 12.1213M19.3787 12.1213L17.2574 14.2426M19.3787 12.1213L17.2574 10M19.3787 12.1213L21.5 14.2426M1.75 7.75H6L12.25 4.25V19.75L6 16.25H1.75V7.75Z'
+/**
+ * Transport glyphs borrowed from radio.omarchy.org (src/lib/icons.ts):
+ * stepped pixel art on a 12x10 lattice, one cell to one CSS pixel, so the
+ * steps land on the pixel grid and crispEdges keeps them there. Scaled x2
+ * for this card. Play: the BIG triangle; Pause: two 3x10 bars.
+ */
+var SCALE = 2
+var PLAY_CELLS = [
+  [1, 0, 2, 1], [1, 1, 4, 1], [1, 2, 6, 1], [1, 3, 8, 1], [1, 4, 10, 1],
+  [1, 5, 10, 1], [1, 6, 8, 1], [1, 7, 6, 1], [1, 8, 4, 1], [1, 9, 2, 1],
+]
+var PAUSE_CELLS = [[2, 0, 3, 10], [7, 0, 3, 10]]
 
-function volumeIcon(on) {
-  return h('svg', { viewBox: '0 0 24 24', width: 18, height: 18, fill: 'none', 'aria-hidden': 'true' },
-    h('path', {
-      d: on ? VOL_ON : VOL_OFF, stroke: 'currentColor', strokeWidth: 1.5,
-      strokeLinecap: on ? 'butt' : 'square',
-    }))
+function transportIcon(on) {
+  var cells = on ? PAUSE_CELLS : PLAY_CELLS
+  var rects = []
+  for (var i = 0; i < cells.length; i += 1) {
+    rects.push(h('rect', { key: i, x: cells[i][0], y: cells[i][1], width: cells[i][2], height: cells[i][3] }))
+  }
+  return h('svg', {
+    viewBox: '0 0 12 10', width: 12 * SCALE, height: 10 * SCALE,
+    fill: 'currentColor', 'shape-rendering': 'crispEdges', 'aria-hidden': 'true',
+  }, rects)
 }
 
 return {
@@ -162,7 +178,6 @@ return {
     var audio = null
     var audioContext = null
     var analyser = null
-    var volumeNode = null
     var running = false
     var objectUrl = ''
     var freq = new Float32Array(0)
@@ -171,8 +186,8 @@ return {
     var peakArr = new Float32Array(BANDS)
     for (var p = 0; p < BANDS; p += 1) peakArr[p] = 0.3
 
-    /** muted | loading | playing | failed, as the site names them. */
-    var state = 'muted'
+    /** paused | loading | playing | failed. */
+    var state = 'paused'
     var touched = false
 
     var subs = []
@@ -198,7 +213,10 @@ return {
       return ((now - clockZero) / 1000) % duration
     }
     function timeNow() {
-      return live() ? audio.currentTime : clockPosition(performance.now())
+      // Once the media element exists its position is the truth — paused or
+      // not, currentTime holds still where the track stopped. Before that,
+      // the silent clock carries the picture.
+      return audio !== null ? audio.currentTime : clockPosition(performance.now())
     }
 
     /** The timeline's 16 bands at a position, spread to 32 and scaled. */
@@ -274,15 +292,6 @@ return {
       }
     }
 
-    /** Fade the volume to a level over a few ms, so there is no click. */
-    function setVolume(level) {
-      if (audioContext === null || volumeNode === null) return
-      var now = audioContext.currentTime
-      volumeNode.gain.cancelScheduledValues(now)
-      volumeNode.gain.setValueAtTime(volumeNode.gain.value, now)
-      volumeNode.gain.linearRampToValueAtTime(level, now + 0.06)
-    }
-
     /** Stitch the MP3 windows into one Blob URL. */
     function fetchTrack() {
       var parts = []
@@ -305,7 +314,7 @@ return {
       return step()
     }
 
-    /** Wire the media element through the analyser to the volume. */
+    /** Wire the media element through the analyser, straight to the speakers. */
     function wire() {
       audio = new Audio()
       audio.loop = true
@@ -337,20 +346,14 @@ return {
       analyser.smoothingTimeConstant = 0
       freq = new Float32Array(analyser.frequencyBinCount)
       layoutBands(audioContext.sampleRate)
-      volumeNode = audioContext.createGain()
       audioContext.createMediaElementSource(audio).connect(analyser)
-      analyser.connect(volumeNode)
-      volumeNode.connect(audioContext.destination)
+      analyser.connect(audioContext.destination)
     }
 
-    function unmute() {
+    /** Start — or restart — the track for real. The first press also fetches. */
+    function play() {
       touched = true
-      if (live()) {
-        setVolume(1)
-        state = 'playing'
-        announce()
-        return
-      }
+      if (state === 'playing') return
       state = 'loading'
       announce()
       var ready = audio === null ? fetchTrack() : Promise.resolve()
@@ -358,11 +361,12 @@ return {
         if (audio === null) wire()
         if (audioContext.state !== 'running') return audioContext.resume()
       }).then(function () {
-        setVolume(1)
-        if (duration > 0) audio.currentTime = clockPosition(performance.now())
+        // A cold start picks up where the silent clock got to; a resumed
+        // one simply goes on from where it was paused.
+        if (audio.currentTime === 0 && duration > 0) audio.currentTime = clockPosition(performance.now())
         return audio.play()
       }).catch(function () {
-        // Turned off again before it started: that is not a failure.
+        // Paused again before it started: that is not a failure.
         if (state === 'loading') {
           state = 'failed'
           announce()
@@ -370,23 +374,24 @@ return {
       })
     }
 
-    /** Sound off; the track keeps running silently, one press away. */
-    function mute() {
-      if (live()) setVolume(0)
-      else if (audio !== null) audio.pause()
-      state = 'muted'
+    /** Stop the sound where it is; the meter and line freeze with it. */
+    function pause() {
+      if (audio !== null) audio.pause()
+      if (state !== 'failed') state = 'paused'
       announce()
     }
 
     function toggle() {
-      if (sounding()) mute()
-      else unmute()
+      if (state === 'playing' || state === 'loading') pause()
+      else play()
     }
 
     function seek(seconds) {
       if (duration <= 0) return
       var at = Math.max(0, Math.min(duration - 0.5, seconds))
-      if (live()) audio.currentTime = at
+      // The media element when there is one — running or paused alike;
+      // the silent clock in any case, so the two agree if sound returns.
+      if (audio !== null) audio.currentTime = at
       clockZero = performance.now() - at * 1000
     }
 
@@ -533,8 +538,8 @@ return {
           className: 'omamusic-art',
           type: 'button',
           'aria-pressed': on,
-          'aria-label': on ? 'Turn the sound off' : 'Turn the sound on',
-          title: on ? 'Sound off' : 'Sound on',
+          'aria-label': on ? 'Pause the track' : 'Play the track',
+          title: on ? 'Pause' : 'Play',
           style: meta !== null ? { backgroundImage: 'url(' + meta.art + ')' } : null,
           onClick: function () {
             if (dragMoved.current) return
@@ -542,7 +547,7 @@ return {
           },
         },
           touched ? null : h('span', { 'aria-hidden': 'true', className: 'omamusic-ring' }),
-          h('span', { className: 'omamusic-veil', 'aria-hidden': 'true' }, volumeIcon(on))),
+          h('span', { className: 'omamusic-veil', 'aria-hidden': 'true' }, transportIcon(on))),
         h('span', { className: 'omamusic-tip', 'aria-hidden': 'true' },
           h('span', { className: 'omamusic-tip-title' }, TRACK.title),
           h('span', { className: 'omamusic-tip-artist' }, TRACK.artist)),
