@@ -222,7 +222,7 @@ return {
           notify()
           return
         }
-        state.entries = entries
+        state.entries = entries.sort(function (a, b) { return a.name.localeCompare(b.name) })
         state.error = ''
         state.loading = false
         notify()
