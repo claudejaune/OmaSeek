@@ -143,8 +143,10 @@ var CSS = [
   'box-shadow:0 4px 16px rgba(0,0,0,.25);opacity:0;pointer-events:none;white-space:nowrap;',
   'transition:opacity .15s ease-out}',
   // The tip lingers a moment before it appears — 1.5 s of hover, then the
-  // same fade; leaving unpainted, it fades out at once.
+  // same fade; leaving unpainted, it fades out at once. And it is no
+  // luggage: while the card is being dragged the tip stays behind.
   '.omamusic:hover .omamusic-tip{opacity:1;transition-delay:1.5s}',
+  '.omamusic[data-dragging="1"] .omamusic-tip{opacity:0;transition-delay:0s}',
   '.omamusic-tip-title{font-size:12px;font-weight:500;color:var(--dsw-alias-label-primary)}',
   '.omamusic-tip-artist{font-size:11px;color:var(--dsw-alias-label-secondary)}',
 ].join('\n')
@@ -563,6 +565,8 @@ return {
           var dy = ev.clientY - startY
           if (!dragMoved.current && Math.abs(dx) + Math.abs(dy) < 4) return
           dragMoved.current = true
+          // The tip is not dragged along; it waits for a settled hover.
+          card.setAttribute('data-dragging', '1')
           var left = Math.min(Math.max(originLeft + dx, 8), window.innerWidth - rect.width - 8)
           var top = Math.min(Math.max(originTop + dy, 8), window.innerHeight - rect.height - 8)
           home.current = { left: left, top: top }
@@ -570,6 +574,7 @@ return {
           card.style.top = top + 'px'
         }
         function onUp() {
+          card.removeAttribute('data-dragging')
           window.removeEventListener('pointermove', onMove)
           window.removeEventListener('pointerup', onUp)
           window.removeEventListener('pointercancel', onUp)
