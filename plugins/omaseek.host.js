@@ -15,7 +15,7 @@ var DOC_PATH = './themes.md'
 /** Palette slots served per theme, in the order the Client decodes them. */
 var KEYS = [
   'bg', 'bgDeep', 'surface', 'surface2', 'borderSubtle', 'borderStrong',
-  'brand', 'text', 'textSecondary', 'textMuted', 'fieldBg', 'error', 'success', 'warn',
+  'brand', 'text', 'textSecondary', 'textMuted', 'brandInk', 'fieldBg', 'error', 'success', 'warn',
 ]
 
 /** §7.2 row label → palette slot. The sidebar fill follows --t-bg-deep. */
@@ -103,7 +103,7 @@ function parseThemes(text) {
   entries.sort(function (a, b) { return a.order - b.order })
 
   var native = table(lines, '### 7.2', 1, '--dsw-')
-  var muted = table(lines, '### 4.1', 2, 'Muted text')
+  var ui = table(lines, '### 4.1', 2, '')
   var fields = table(lines, '### 5.2', 1, 'Text input field')
 
   return entries.map(function (entry) {
@@ -114,7 +114,8 @@ function parseThemes(text) {
       if (row === undefined) throw new Error('\u00a77.2 row missing: ' + name)
       palette[NATIVE_ROWS[t][1]] = row[entry.name]
     }
-    palette.textMuted = pick(muted, 'Muted text')[entry.name]
+    palette.textMuted = pick(ui, 'Muted text')[entry.name]
+    palette.brandInk = pick(ui, 'On-brand text')[entry.name]
     palette.fieldBg = pick(fields, 'Text input field')[entry.name]
     for (var k = 0; k < KEYS.length; k += 1) {
       var value = palette[KEYS[k]]

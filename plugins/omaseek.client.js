@@ -49,7 +49,7 @@ function toRgb(value) {
 }
 
 /**
- * Expand one 14-color research palette into the token map `theme.register`
+ * Expand one 15-color research palette into the token map `theme.register`
  * consumes. A registered theme declares a single color scheme, so every token
  * is a plain value — the `{ light, dark }` pair form is only for override
  * layers, which this Plugin does not need.
@@ -85,6 +85,9 @@ function tokensFor(p) {
   tokens['--dsw-specific-menu'] = p.surface
   tokens['--dsw-specific-selector'] = p.surface2
   tokens['--dsw-specific-tip'] = p.surface2
+  // Omarchy picks an ink per brand (§4.1 On-brand text) so glyphs on brand
+  // fills read on every palette; the send/stop sheet paints with it.
+  tokens['--dsw-specific-brand-ink'] = p.brandInk
   // Sidebar interaction states are stepped off the sidebar fill itself, so
   // hover/active stay visible on themes where the layers share one color.
   var sidebar = p.bgDeep
@@ -202,6 +205,15 @@ var CSS = [
   // Feature test in CSS: the Client half has no `document` to ask, so the
   // warning is hidden here and revealed only where corner-shape is missing.
   '@supports not (corner-shape: square){.omaseek-warn{display:block}}',
+  // Send and stop — the site's "Get Omarchy" button scheme: brand fill,
+  // brand ink glyph, hover 14 % whiter in oklch (button.tsx default variant).
+  // They share the InputBar module's single `primary` class (KFmeWW_primary);
+  // the hash-qualified fragment keeps the hit exact in this build — update
+  // it if a harness rebuild renames the module.
+  'button[class*="KFmeWW_primary"]{background:var(--dsw-alias-brand-primary);',
+  'color:var(--dsw-specific-brand-ink,#fff)}',
+  'button[class*="KFmeWW_primary"]:hover:not(:disabled){',
+  'background:color-mix(in oklch, var(--dsw-alias-brand-primary), white 14%)}',
 ].join('\n')
 
 /** createElement shorthand — this Package is not compiled, so no JSX. */
