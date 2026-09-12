@@ -7,7 +7,9 @@
  * the seventeen dark ones while it is dark. That filtering is the whole
  * design: a registered theme declares exactly one `colorScheme`, so a dark
  * palette is never offered over a light UI. The page also switches corner
- * shape, and Square is on from the moment the Plugin loads.
+ * shape, and Square is on from the moment the Plugin loads. The New Session
+ * hero swaps its headline for one of the four OmaSeek phrases, typed letter
+ * by letter once per hero mount.
  *
  * The palettes themselves arrive from this Package's Host half, which parses
  * them out of the research doc; only the derived tokens are computed here.
@@ -117,6 +119,57 @@ var CORNER_SHEET = {
 
 var CORNER_LABELS = { squircle: 'Squircle', square: 'Square' }
 
+/**
+ * The New Session hero's headline, replaced per Plugin load.
+ *
+ * The shipped headline is a plain `t('hero.headline')` span with no Slot of
+ * its own, and its locale dictionary is single-occupant — so the sheet is
+ * the surface: hide the shipped glyphs (`font-size: 0`) and let an `::after`
+ * speak the chosen phrase, inheriting the headline's own
+ * `--dsw-alias-label-primary`.
+ *
+ * The typing mirrors omarchy.org's `TypewriterTail` rhythm (≈58 ms a
+ * keystroke plus jitter averages ~88 ms) but differs on purpose: every
+ * letter of the phrase animates — not just a tail after a static prefix —
+ * exactly once, then it stops. A `steps(len)` clip on the pseudo-element is
+ * the one primitive that reveals left to right with no per-letter DOM, and
+ * an absolutely positioned caret pseudo walks the same steps and then blinks
+ * at the end, like the site's idle caret.
+ */
+var HERO_PHRASES = [
+  'We can fix every paper cut',
+  'We can fix everything.',
+  'We can fix every missing app.',
+  'We can fix every incompatibility.',
+]
+
+/** One hero sheet for one phrase: replacement always, typing when motion is fine. */
+function heroSheet(phrase) {
+  var len = phrase.length
+  var ms = Math.round(len * 88)
+  var start = 350
+  // The shipped title span; the sibling badge is told apart by its class.
+  var title = '[class*="titleGroup"] > span:not([class*="previewBadge"])'
+  return [
+    title + '{position:relative;font-size:0}',
+    title + '::after{content:"' + phrase + '";display:inline-block;font-size:26px;line-height:32px;',
+    'font-weight:500;white-space:pre-wrap;max-width:100%}',
+    // px, not em: the host span sits at font-size 0, where em would vanish.
+    '@media (prefers-reduced-motion: no-preference){',
+    title + '::after{clip-path:inset(-0.1em 100% -0.2em 0);',
+    'animation:omaseek-hero-type ' + ms + 'ms steps(' + len + ',end) ' + start + 'ms forwards}',
+    title + '::before{content:"";position:absolute;left:0;top:50%;width:3px;height:28px;margin-top:-14px;',
+    'background:var(--dsw-alias-brand-primary);',
+    'animation:omaseek-hero-caret ' + ms + 'ms steps(' + len + ',end) ' + start + 'ms forwards,',
+    'omaseek-hero-blink 1.06s step-end ' + (start + ms + 500) + 'ms infinite}',
+    '}',
+    // The overshoot past 0% keeps the last glyph's edge off the clip line.
+    '@keyframes omaseek-hero-type{from{clip-path:inset(-0.1em 100% -0.2em 0)}to{clip-path:inset(-0.1em -1% -0.2em 0)}}',
+    '@keyframes omaseek-hero-caret{from{left:0}to{left:100%}}',
+    '@keyframes omaseek-hero-blink{0%,50%{opacity:1}50.01%,100%{opacity:0}}',
+  ].join('\n')
+}
+
 var CSS = [
   '.omaseek{display:flex;flex-direction:column;gap:20px;max-width:1000px}',
   '.omaseek-title{font-size:16px;font-weight:600;color:var(--dsw-alias-label-primary)}',
@@ -193,6 +246,12 @@ return {
     setCorners(state.corners)
 
     ctx.effect(function () { return styles.insert(CSS) }, 'omaseek: styles')
+    ctx.effect(function () {
+      // One phrase per run, picked when the Plugin loads; the typing itself is
+      // per hero mount, because the CSS animation restarts with the element.
+      var phrase = HERO_PHRASES[Math.floor(Math.random() * HERO_PHRASES.length)]
+      return styles.insert(heroSheet(phrase))
+    }, 'omaseek: hero headline')
     ctx.effect(function () {
       // The style tags go with the run anyway; this disposes the corner sheet
       // on its own too, so an update that never set a corner mode is clean.
