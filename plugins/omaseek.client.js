@@ -138,9 +138,9 @@ var CORNER_LABELS = { squircle: 'Squircle', square: 'Square' }
  */
 var HERO_PHRASES = [
   'We can fix every paper cut',
-  'We can fix everything.',
-  'We can fix every missing app.',
-  'We can fix every incompatibility.',
+  'We can fix everything',
+  'We can fix every missing app',
+  'We can fix every incompatibility',
 ]
 
 /** One hero sheet for one phrase: replacement always, typing when motion is fine. */
