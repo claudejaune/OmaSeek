@@ -147,6 +147,9 @@ var CSS = [
   // luggage: while the card is being dragged the tip stays behind.
   '.omamusic:hover .omamusic-tip{opacity:1;transition-delay:1.5s}',
   '.omamusic[data-dragging="1"] .omamusic-tip{opacity:0;transition-delay:0s}',
+  // Nor does the card tip crowd the meter's own: while the pointer is on
+  // the meter, the only tip is the switch's.
+  '.omamusic:has(.omamusic-meter:hover) .omamusic-tip{opacity:0;transition-delay:0s}',
   '.omamusic-tip-title{font-size:12px;font-weight:500;color:var(--dsw-alias-label-primary)}',
   '.omamusic-tip-artist{font-size:11px;color:var(--dsw-alias-label-secondary)}',
 ].join('\n')
