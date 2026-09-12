@@ -1,0 +1,14 @@
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.idea/
+.vscode/
+
+# Node (for any future tooling around the plugin sources)
+node_modules/
+dist/
+*.log
+npm-debug.log*
+pnpm-debug.log*
