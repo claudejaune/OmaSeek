@@ -37,6 +37,20 @@ var MUTED_GAIN = 0.6
 var METER_BARS = 4
 var METER_STEPS = 5
 
+/**
+ * The card's title budget, in characters — the width the site's card gets
+ * by stripping its parenthetical suffix. Longer titles are cut back to the
+ * last whole word and ellipsised; the full name lives in the hover tooltip.
+ */
+var TITLE_MAX = 25
+function shortTitle(title) {
+  if (title.length <= TITLE_MAX) return title
+  var cut = title.slice(0, TITLE_MAX)
+  var sp = cut.lastIndexOf(' ')
+  if (sp > 12) cut = cut.slice(0, sp)
+  return cut.replace(/[\s(]+$/, '') + '\u2026'
+}
+
 /** `m:ss` the way the site writes it. */
 function clock(seconds) {
   var s = Math.max(0, Math.floor(seconds))
@@ -98,6 +112,16 @@ var CSS = [
   '.omamusic-seek::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:0;height:14px;',
   'border:none;background:transparent}',
   '.omamusic-seek::-moz-range-thumb{width:0;height:14px;border:none;background:transparent}',
+  // Hover tooltip: the full title over the artist, painted with the tip
+  // token so it follows the active palette (fallback: the overlay surface).
+  '.omamusic-tip{position:absolute;left:0;bottom:calc(100% + 8px);display:flex;flex-direction:column;',
+  'gap:2px;padding:8px 10px;border:1px solid var(--dsw-alias-border-l1);',
+  'background:var(--dsw-specific-tip, var(--dsw-alias-bg-overlay));',
+  'box-shadow:0 4px 16px rgba(0,0,0,.25);opacity:0;pointer-events:none;white-space:nowrap;',
+  'transition:opacity .15s ease-out}',
+  '.omamusic:hover .omamusic-tip{opacity:1}',
+  '.omamusic-tip-title{font-size:12px;font-weight:500;color:var(--dsw-alias-label-primary)}',
+  '.omamusic-tip-artist{font-size:11px;color:var(--dsw-alias-label-secondary)}',
 ].join('\n')
 
 /** createElement shorthand — this Package is not compiled, so no JSX. */
@@ -519,9 +543,12 @@ return {
         },
           touched ? null : h('span', { 'aria-hidden': 'true', className: 'omamusic-ring' }),
           h('span', { className: 'omamusic-veil', 'aria-hidden': 'true' }, volumeIcon(on))),
+        h('span', { className: 'omamusic-tip', 'aria-hidden': 'true' },
+          h('span', { className: 'omamusic-tip-title' }, TRACK.title),
+          h('span', { className: 'omamusic-tip-artist' }, TRACK.artist)),
         h('span', { className: 'omamusic-text' },
           h('span', { className: 'omamusic-title' },
-            state === 'failed' ? 'The sound could not start' : TRACK.title),
+            state === 'failed' ? 'The sound could not start' : shortTitle(TRACK.title)),
           h('span', { className: 'omamusic-byline' },
             h('span', { className: 'omamusic-artist' }, TRACK.artist),
             h('span', { 'aria-hidden': 'true', ref: readoutRef, className: 'omamusic-readout' }))),
