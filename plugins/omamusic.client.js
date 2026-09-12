@@ -276,6 +276,7 @@ return {
 
     /** Four coarse levels for the meter, from whichever source is current. */
     var meterBands = new Float32Array(BANDS)
+    var liveBands = new Float32Array(BANDS)
     function meter(out) {
       var per = BANDS / out.length
       var m, b, level
@@ -290,13 +291,26 @@ return {
         }
         return
       }
+      // The live reading, auto-ranged — the per-frame work the site's
+      // music.sample() does and this card had never been doing: the peak
+      // decays slowly and jumps to anything louder, the floor creeps up
+      // towards it and drops at once. Without that the levels divide by
+      // the fixed 0.3-0.15 span and clamp straight to full height, which
+      // is the wall of bars the card used to freeze into.
       analyser.getFloatFrequencyData(freq)
+      for (b = 0; b < BANDS; b += 1) {
+        var raw = liveBand(b).raw
+        peakArr[b] = Math.max(peakArr[b] * 0.9993, raw, 0.2)
+        floorArr[b] = Math.min(raw, floorArr[b] + (peakArr[b] - floorArr[b]) * 0.003)
+        var span = Math.max(0.15, peakArr[b] - floorArr[b])
+        liveBands[b] = Math.max(0, Math.min(1, (raw - floorArr[b]) / span)) * LIVE_GAIN
+      }
       for (m = 0; m < out.length; m += 1) {
         level = 0
         for (b = Math.floor(m * per); b < Math.floor((m + 1) * per); b += 1) {
-          level = Math.max(level, liveBand(b).level)
+          level = Math.max(level, liveBands[b])
         }
-        out[m] = Math.max(0, Math.min(1, level)) * LIVE_GAIN
+        out[m] = level
       }
     }
 
