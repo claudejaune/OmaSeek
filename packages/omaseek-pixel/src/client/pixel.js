@@ -776,6 +776,7 @@ var CSS = [
   '.omapixel{display:flex;flex-direction:column;gap:20px;max-width:1000px}',
   '.omapixel-title{font-size:16px;font-weight:600;color:var(--dsw-alias-label-primary)}',
   '.omapixel-note{font-size:12px;line-height:1.6;color:var(--dsw-alias-label-secondary);max-width:62ch}',
+  '.omapixel-setting{display:flex;flex-direction:column;gap:8px}',
   '.omapixel-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}',
   '.omapixel-chip{font:inherit;font-size:12px;padding:4px 12px;border-radius:999px;cursor:pointer;',
   'border:1px solid var(--dsw-alias-border-l2);background:transparent;color:var(--dsw-alias-label-secondary)}',
@@ -952,34 +953,34 @@ export function applyFeature(host) {
 
     return h('div', { className: 'omapixel' },
       h('div', null, h('div', { className: 'omapixel-title' }, 'OmaPixel')),
-      h('div', { className: 'omapixel-row' },
-        h('span', { className: 'omapixel-legend' }, 'Pixel field'),
-        FIELD_MODES.map(function (mode) {
-          return h('button', {
-            key: mode,
-            className: 'omapixel-chip',
-            type: 'button',
-            'data-on': state.field === mode ? '1' : '0',
-            onClick: function () { setFieldMode(mode) },
-          }, FIELD_LABELS[mode])
-        })),
-      h('div', { className: 'omapixel-row' },
-        h('span', { className: 'omapixel-legend' }, 'Headline'),
-        TYPE_MODES.map(function (mode) {
-          return h('button', {
-            key: mode,
-            className: 'omapixel-chip',
-            type: 'button',
-            'data-on': state.typing === mode ? '1' : '0',
-            onClick: function () { setTypingMode(mode) },
-          }, TYPE_LABELS[mode])
-        })),
-      h('div', { className: 'omapixel-note' },
-        'Off runs nothing, Ambient is the drifting lattice alone, and Interactive adds'
-        + ' the cursor glow and the press stamp. The field takes its inks from the theme'
-        + ' now in force. Loop keeps the site\'s rotation — type a phrase, hold, delete'
-        + ' back to "We can fix every", type on — and Once types one random phrase per'
-        + ' load and stops.'))
+      h('div', { className: 'omapixel-setting' },
+        h('div', { className: 'omapixel-row' },
+          h('span', { className: 'omapixel-legend' }, 'Pixel field'),
+          FIELD_MODES.map(function (mode) {
+            return h('button', {
+              key: mode,
+              className: 'omapixel-chip',
+              type: 'button',
+              'data-on': state.field === mode ? '1' : '0',
+              onClick: function () { setFieldMode(mode) },
+            }, FIELD_LABELS[mode])
+          })),
+        h('div', { className: 'omapixel-note' },
+          'The cool pixel animations on omarchy.org. (needs page refresh)')),
+      h('div', { className: 'omapixel-setting' },
+        h('div', { className: 'omapixel-row' },
+          h('span', { className: 'omapixel-legend' }, 'Headline'),
+          TYPE_MODES.map(function (mode) {
+            return h('button', {
+              key: mode,
+              className: 'omapixel-chip',
+              type: 'button',
+              'data-on': state.typing === mode ? '1' : '0',
+              onClick: function () { setTypingMode(mode) },
+            }, TYPE_LABELS[mode])
+          })),
+        h('div', { className: 'omapixel-note' },
+          'Types omarchy.org\'s headline rotation: loop forever or just play once.')))
   }
 
   ctx.effect(function () {
