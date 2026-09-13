@@ -1,4 +1,4 @@
-# OmaSeek — themes
+# OmaThemes
 
 All 22 [Omarchy](https://omarchy.org) home-page themes as DeepSeek Harness themes, with a
 picker that follows the light/dark scheme and Omarchy's corner shapes.
@@ -13,7 +13,7 @@ npx @deepseek-ai/dsh plugin --profile web add omaseek-themes   # running with np
 pnpm dsh plugin --profile web add omaseek-themes               # running from a source checkout
 ```
 
-Restart the harness, then look under **Settings → OmaSeek**. It opens on Catppuccin — Latte
+Restart the harness, then look under **Settings → OmaThemes**. It opens on Catppuccin — Latte
 while the app is light, Catppuccin while it is dark — and remembers what you pick per scheme,
 across reloads. Picking Light or Dark keeps the harness's own palette for that scheme.
 

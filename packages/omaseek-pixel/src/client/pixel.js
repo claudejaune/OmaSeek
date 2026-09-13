@@ -11,7 +11,7 @@
  *
  * This is the browser half of the `omaseek` package. It reads the theme now
  * in force straight off the page (the `--dsw-alias-*` variables on `body`)
- * and remounts on `theme/change`, which is how it follows an OmaSeek palette:
+ * and remounts on `theme/change`, which is how it follows an OmaThemes palette:
  * the field paints with whatever the page carries, shipped theme or fallback
  * inks below. It asks the Node half for nothing.
  *
@@ -223,7 +223,7 @@ function fieldPalette() {
 /**
  * Any CSS color as `#rrggbb`.
  *
- * A registered OmaSeek theme hands back the hex it was built from, but the
+ * A registered OmaThemes theme hands back the hex it was built from, but the
  * built-in light/dark themes' tokens are not hex, and a custom property
  * reads back exactly what it was declared as. An off-screen probe lets the
  * engine resolve whatever that is to an `rgb()` triple.
@@ -650,7 +650,7 @@ function mountField(host, live) {
  * prefix lives. The site renders a static "We can fix every" and types only
  * the tail, so deleting can stop at zero; here every phrase is complete, and
  * `shared` stops the deletion at the front the current phrase and the next
- * share — which, for the four OmaSeek phrases, is exactly "We can fix every".
+ * share — which, for the four hero phrases, is exactly "We can fix every".
  * ───────────────────────────────────────────────────────────────────── */
 
 /** Base milliseconds per keystroke, plus up to this much again at random. */
@@ -920,8 +920,8 @@ export function applyFeature(host) {
 
   ctx.effect(function () {
     // A theme swap changes the field's inks: remount, which re-reads them.
-    // This is the whole seam to OmaSeek — the field simply follows whatever
-    // palette the page carries, and works unchanged when OmaSeek is absent.
+    // This is the whole seam to OmaThemes — the field simply follows whatever
+    // palette the page carries, and works unchanged when OmaThemes is absent.
     return ctx.on('theme/change', function () { fieldHost = null; syncField() })
   }, 'omapixel: field palette')
 

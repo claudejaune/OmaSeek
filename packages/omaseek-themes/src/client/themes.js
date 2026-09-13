@@ -1,5 +1,5 @@
 /**
- * OmaSeek — Omarchy home-page themes for DeepSeek Harness. Client half.
+ * OmaThemes — Omarchy home-page themes for DeepSeek Harness. Client half.
  *
  * Registers all 22 Omarchy home-page themes with the `theme` Service, then
  * contributes a Settings page listing only the themes belonging to the color
@@ -373,7 +373,7 @@ export function applyFeature(host) {
     }
 
     var children = [
-      h('div', { key: 'head' }, h('div', { className: 'omaseek-title' }, 'OmaSeek')),
+      h('div', { key: 'head' }, h('div', { className: 'omaseek-title' }, 'OmaThemes')),
     ]
 
     if (state.error !== '') {
@@ -434,7 +434,7 @@ export function applyFeature(host) {
   ctx.effect(function () {
     return slots.inject('settings.section', function () {
       return slots.register(
-        { name: 'settings.section', id: 'omarchy-themes', order: 12, label: 'OmaSeek' },
+        { name: 'settings.section', id: 'omarchy-themes', order: 12, label: 'OmaThemes' },
         ThemePage,
       )
     })

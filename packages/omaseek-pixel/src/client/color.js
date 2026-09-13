@@ -1,7 +1,7 @@
 /**
  * The one color step both palette builders share.
  *
- * OmaSeek's registered themes expand 14 source colors into 29 tokens, and the
+ * OmaThemes' registered themes expand 14 source colors into 29 tokens, and the
  * hero field steps its inks off the same two theme tokens; both need the same
  * blend, so it lives here rather than twice.
  */

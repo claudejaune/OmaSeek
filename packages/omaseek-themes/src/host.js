@@ -1,5 +1,5 @@
 /**
- * OmaSeek — Omarchy home-page themes for DeepSeek Harness. Node half.
+ * OmaThemes — Omarchy home-page themes for DeepSeek Harness. Node half.
  *
  * Reads the palette research doc (`themes.md`) and serves the 22 home-page
  * themes to this package's browser half over one Connection Fetch route. The
@@ -8,7 +8,7 @@
  * duplicated into plugin code.
  *
  * The doc ships with the package, so it is read through a URL relative to
- * this module rather than a checkout path — wherever pnpm installs OmaSeek,
+ * this module rather than a checkout path — wherever pnpm installs OmaThemes,
  * the module finds its own `themes.md`. The `fs` Service stays optional: we
  * use it when the host carries one and fall back to the Node builtin read
  * when it does not.

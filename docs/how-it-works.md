@@ -6,10 +6,10 @@ reaches the Node side. Nothing here is needed to use the plugins.
 ## The features
 
 
-### OmaSeek — the themes
+### OmaThemes — the themes
 
 Every theme is registered with `theme.register({ id, colorScheme, tokens })` and contributes
-the **Settings → OmaSeek** page: scheme chips, one card per theme with a live miniature of
+the **Settings → OmaThemes** page: scheme chips, one card per theme with a live miniature of
 its palette, the active one marked.
 
 **It opens on Catppuccin.** With nothing chosen, a light UI gets **Catppuccin Latte** and a
@@ -173,7 +173,7 @@ steering) message only — `MessageItem.tsx`'s `UserStyleBubble` documents itsel
 `--dsw-alias-bg-base`, so it follows the text/background tokens and needs no surface color.
 
 **The shell does not persist a picked theme; the picker does.** `setTheme()` only writes the
-built-in `light`/`dark`/`system` preference to settings. OmaSeek therefore remembers its own
+built-in `light`/`dark`/`system` preference to settings. OmaThemes therefore remembers its own
 choice per scheme in `localStorage` (`omaseek.themes`) and re-applies it on load.
 
 ## Sources

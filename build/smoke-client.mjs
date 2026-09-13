@@ -223,8 +223,8 @@ const PACKAGES = [
   {
     dir: 'packages/omaseek-themes',
     id: 'omaseek-themes',
-    label: 'OmaSeek (themes)',
-    expect: { sections: ['settings.section'], overlays: 0 },
+    label: 'OmaThemes (themes)',
+    expect: { sections: ['settings.section'], overlays: 0, sectionLabel: 'OmaThemes' },
     cases: [
       { label: 'dark scheme, nothing chosen', scheme: 'dark', applied: 'omarchy-catppuccin', themes: 4 },
       { label: 'light scheme, nothing chosen', scheme: 'light', applied: 'omarchy-catppuccin-latte', themes: 4 },
@@ -411,6 +411,13 @@ async function runCase(pkg, testCase) {
   }
   for (const slot of wanted.sections) {
     if (!calls.sections.includes(slot)) problems.push(`no ${slot} registration`)
+  }
+  if (wanted.sectionLabel !== undefined) {
+    const registered = calls.registered.filter((entry) => entry.options.name === 'settings.section')
+    const labels = registered.map((entry) => entry.options.label)
+    if (!labels.includes(wanted.sectionLabel)) {
+      problems.push(`the settings page is called ${labels.join(', ') || 'nothing'}, expected ${wanted.sectionLabel}`)
+    }
   }
   if (calls.overlays.length !== wanted.overlays) {
     problems.push(`registered ${calls.overlays.length} overlay cards, expected ${wanted.overlays}`)
