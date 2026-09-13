@@ -135,13 +135,23 @@ function heroSheet(phrase) {
  * The canvas is a `z-index:-1` child of the conversation root while that
  * root is in its `hero` phase, so it paints above the panel's own
  * background and below everything the harness draws — no product element is
- * restacked, no Slot is replaced. Its width is the composer column
- * (`--dsw-composer-card-max-width`) and its height the whole panel: a column
- * of pixels the hero stands in, running to the panel's floor and header.
+ * restacked, no Slot is replaced. It covers the whole panel, exactly as the
+ * site's canvas covers its hero section: the clear column the hero stands in
+ * is a ramp, not a clip, so there is no straight edge anywhere in it.
  * ───────────────────────────────────────────────────────────────────── */
 
-/** Edge of one cell in CSS px. Chunky enough to read as pixels. */
-var CELL_CSS = 8
+/**
+ * The site's lattice, derived rather than hard-coded: its grid is the
+ * wordmark slot — 88 % of the section, less a 48 px inset, capped at 896 px —
+ * split into the wordmark's 81 columns, which lands near 11 CSS px on a wide
+ * hero. A fixed cell is what made our field read as twice the site's density.
+ */
+var GRID_CELLS = 81
+var SLOT_FRACTION = 0.88
+var SLOT_INSET = 48
+var SLOT_MAX = 896
+/** Floor for that derivation, in CSS px, so a narrow panel still has a field. */
+var CELL_MIN_CSS = 3
 /** Tileable value noise, and how many cells one blob covers. */
 var NOISE_SIZE = 128
 var CELLS_PER_NOISE = 9
@@ -153,11 +163,24 @@ var FRAME_MS = 25
 var CHARGE_TIME = 1.1
 var CHARGE_FROM = 0.45
 var CHARGE_GROWTH = 1.6
-/** Bleed past the column's sides, in cells. */
-var BLEED_X = 2
-/** The clear oval: nothing inside RAMP_INNER, full density past RAMP_INNER + RAMP_SPAN. */
-var RAMP_INNER = 0.3
-var RAMP_SPAN = 0.6
+/**
+ * The site's clear oval, per axis: nothing inside RAMP_INNER, full density
+ * past RAMP_INNER + RAMP_SPAN. An oval of radius 1 is the half-extent of the
+ * canvas *on that axis*, so the shape scales with the panel instead of
+ * saturating the way a single half-width did.
+ */
+var RAMP_INNER = 0.42
+var RAMP_SPAN = 0.85
+/** The clear region is a shade taller than wide, as the hero's copy is. */
+var RAMP_Y_SCALE = 0.82
+/**
+ * The site's vertical gradient: the first RAMP_FADE_PX of the field fades up
+ * from RAMP_FLOOR, so the top of the hero is quiet and the density arrives
+ * below the fold of the copy.
+ */
+var RAMP_FLOOR = 0.16
+var RAMP_TOP_PX = 24
+var RAMP_FADE_PX = 130
 
 /** Classic 8x8 ordered dither matrix, 0..63. */
 var BAYER = [
@@ -356,9 +379,10 @@ function mountField(host, live) {
   var width = 0
   var height = 0
   var cell = 8
-  // The band, in device px: cells outside it are never drawn, which is what
-  // keeps the field a hero backdrop rather than a full-panel wash.
-  var band = { l: 0, t: 0, r: 0, b: 0 }
+  // The lattice starts at originX horizontally — centred on the composer
+  // column — and at the canvas top vertically. Nothing is clipped: the whole
+  // canvas is a field, and the ramp alone decides where it is dark.
+  var originX = 0
   var cols = 0
   var rows = 0
   var ramp = new Float32Array(0)
@@ -369,7 +393,7 @@ function mountField(host, live) {
   var pings = []
   var holding = null
 
-  /** Cells per noise unit → the same blob size however big the band is. */
+  /** Cells per noise unit → the same blob size however big the field is. */
   function measure() {
     var box = host.getBoundingClientRect()
     if (box.width < 1 || box.height < 1) return false
@@ -384,49 +408,40 @@ function mountField(host, live) {
       canvas.height = height
     }
 
-    var headline = host.querySelector('[class*="headline"]')
+    // The composer column is no longer a clip — it is where the clear oval is
+    // centred, so the hero's copy keeps its quiet.
     var seat = host.querySelector('[data-composer-seat]')
-    var hb = headline !== null ? headline.getBoundingClientRect() : box
-    var sb = seat !== null ? seat.getBoundingClientRect() : hb
-    var cardRaw = getComputedStyle(host).getPropertyValue('--dsw-composer-card-max-width')
-    var card = parseFloat(cardRaw)
-    if (!(card > 0)) card = Math.max(hb.width, sb.width)
-    var bw = Math.min(box.width - 16, Math.max(card, hb.width))
-    var cx = (sb.left + sb.width / 2 - box.left) * dpr
+    var headline = host.querySelector('[class*="headline"]')
+    var anchor = seat !== null ? seat : headline
+    var ab = anchor !== null ? anchor.getBoundingClientRect() : box
+    var cx = Math.min(width - 4, Math.max(4, (ab.left + ab.width / 2 - box.left) * dpr))
 
-    // Width follows the composer column; height is the whole panel. The field
-    // is a column of pixels the hero stands in, not a strip behind its copy —
-    // the harness hero is a full-height centered stack, so a band cut to the
-    // text would have stopped short of the panel floor and header.
-    cell = Math.max(3, Math.round(CELL_CSS * dpr))
-    band.l = cx - (bw * dpr) / 2 - BLEED_X * cell
-    band.t = 0
-    band.r = cx + (bw * dpr) / 2 + BLEED_X * cell
-    band.b = height
+    // The site has no fixed cell either: one cell is the wordmark slot over
+    // its 81 columns, so the lattice coarsens and tightens with the panel.
+    var slot = Math.min(SLOT_FRACTION * (box.width - SLOT_INSET), SLOT_MAX)
+    if (!(slot > 0)) slot = box.width
+    cell = Math.max(CELL_MIN_CSS, Math.round((slot * dpr) / GRID_CELLS))
+    cols = Math.max(1, Math.ceil(width / cell))
+    rows = Math.max(1, Math.ceil(height / cell))
+    originX = cx - (cols * cell) / 2
 
-    cols = Math.max(1, Math.ceil((band.r - band.l) / cell))
-    rows = Math.max(1, Math.ceil((band.b - band.t) / cell))
-    // The ramp is the site's, with one change of scale: both axes are
-    // normalized against the *column's* half-width, not each against its own
-    // extent. The site's hero is a wide, short box, where per-axis
-    // normalization and a true circle amount to the same thing; over a
-    // full-height panel, per-axis normalization pushes almost every cell's
-    // radius past the shape and leaves the field dark but for its corners.
+    // The site's ramp, unaltered: each axis normalized against its own
+    // half-extent, the eased oval, and the gradient that keeps the top of the
+    // field at 16 %. Half-width normalization on both axes reached full
+    // density far too early over a panel this tall.
     ramp = new Float32Array(cols * rows)
-    var halfW = (band.r - band.l) / 2
-    var midX = (band.l + band.r) / 2
-    var midY = (band.t + band.b) / 2
+    var halfW = width / 2
+    var halfH = height / 2
     for (var row = 0; row < rows; row += 1) {
-      var y = band.t + (row + 0.5) * cell
-      var ny = (y - midY) / halfW
+      var y = (row + 0.5) * cell
+      var ny = (y - halfH) / halfH
+      var clear = Math.min(1, Math.max(RAMP_FLOOR, (y / dpr - RAMP_TOP_PX) / RAMP_FADE_PX))
       for (var col = 0; col < cols; col += 1) {
-        var x = band.l + (col + 0.5) * cell
-        var nx = (x - midX) / halfW
-        // 0.82 on the vertical, as on the site: the clear region is a shade
-        // taller than wide, which is what the hero's copy block looks like.
-        var rr = Math.sqrt(nx * nx + ny * ny * 0.82)
+        var x = originX + (col + 0.5) * cell
+        var nx = (x - cx) / halfW
+        var rr = Math.sqrt(nx * nx + ny * ny * RAMP_Y_SCALE)
         var eased = Math.min(1, Math.max(0, (rr - RAMP_INNER) / RAMP_SPAN))
-        ramp[row * cols + col] = eased * eased
+        ramp[row * cols + col] = eased * eased * clear
       }
     }
     return true
@@ -494,13 +509,12 @@ function mountField(host, live) {
     }
 
     for (var row = 0; row < rows; row += 1) {
-      var yTop = band.t + row * cell
+      var yTop = row * cell
       var y = Math.round(yTop)
       var cellH = Math.round(yTop + cell) - y
       var cy = yTop + cell / 2
       for (var col = 0; col < cols; col += 1) {
-        var xLeft = band.l + col * cell
-        if (xLeft < band.l - cell || xLeft > band.r) continue
+        var xLeft = originX + col * cell
         var shade = ramp[row * cols + col]
         var lum = 0
         if (shade > 0.002) {
@@ -511,10 +525,10 @@ function mountField(host, live) {
           var twinkle = 0.5 + 0.5 * Math.sin(
             t * 1.1 + jitter[((row * 37 + col * 11) & 4095)] * 6.283,
           )
-          // 0.62 is the site's; 0.55 keeps the harness's own copy legible
-          // (≈24 % of the band alight rather than ≈29 %) without dulling the
-          // cursor's disc, which never passes through this term.
-          lum = shade * (0.3 + 0.52 * base * base + 0.18 * twinkle) * 0.55
+          // The site's own gain. It was trimmed to 0.55 only to fight the
+          // too-open ramp; with the ramp ported, the trim has nothing left to
+          // pay for, and the cursor's disc never passes through this term.
+          lum = shade * (0.3 + 0.52 * base * base + 0.18 * twinkle) * 0.62
         }
 
         var cxp = xLeft + cell / 2
