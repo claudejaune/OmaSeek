@@ -4,6 +4,8 @@
   "description": "Omarchy home-page themes, hero pixel field, and music cards for DeepSeek Harness",
   "type": "module",
   "license": "MIT",
+  "author": "claudejaune (https://github.com/claudejaune)",
+  "homepage": "https://github.com/claudejaune/OmaSeek#readme",
   "main": "./src/host.js",
   "exports": {
     ".": "./src/host.js",
