@@ -20,7 +20,7 @@ To play something else:
 
 ```sh
 OMASEEK_MUSIC_URL=https://example.com/track.mp3   # stream another track
-OMASEEK_MUSIC_PATH=/home/you/Music/track.mp3      # …or a local file instead
+OMASEEK_MUSIC_PATH=~/Music/track.mp3      # …or a local file instead
 ```
 
 ## License

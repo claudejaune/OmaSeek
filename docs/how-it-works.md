@@ -95,9 +95,9 @@ works). No audio ships with this package; the cover art does.
 
 ```sh
 OMASEEK_MUSIC_URL=https://example.com/other-track.mp3   # stream something else
-OMASEEK_MUSIC_PATH=/home/you/Music/track.mp3            # …or play a local file instead
+OMASEEK_MUSIC_PATH=~/Music/track.mp3            # …or play a local file instead
 OMASEEK_MUSIC_ART=https://example.com/cover.webp        # cover art, streamed
-OMASEEK_MUSIC_TIMELINE=/home/you/Music/track.json       # analysed spectrum, for a local file
+OMASEEK_MUSIC_TIMELINE=~/Music/track.json       # analysed spectrum, for a local file
 ```
 
 A local file wins over the URL: the Node half reads it in windows and stiches them into a
