@@ -1,0 +1,55 @@
+{
+  "name": "omaseek",
+  "version": "0.1.0",
+  "description": "Omarchy home-page themes, hero pixel field, and music cards for DeepSeek Harness",
+  "type": "module",
+  "license": "MIT",
+  "main": "./src/host.js",
+  "exports": {
+    ".": "./src/host.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "lib/client.js",
+    "cordis.patch.yml",
+    "themes.md",
+    "assets/music",
+    "assets/icons",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "node build/bundle-client.mjs",
+    "prepack": "node build/bundle-client.mjs",
+    "check": "node build/bundle-client.mjs && node --check src/host.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "omarchy",
+    "theme"
+  ],
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "*"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/claudejaune/OmaSeek.git"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  }
+}

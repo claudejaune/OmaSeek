@@ -1,102 +1,188 @@
 # OmaSeek
 
-Omarchy themes for DeepSeek Harness.
+Omarchy's home page, for DeepSeek Harness: its 22 palettes, its hero pixel field, and its
+now-playing card.
 
-Two things live here:
+Three features, one install:
 
-1. **`themes.md`** — the research: the 22 themes Omarchy offers on its home page, every
-   color from each one in tables, and how those colors map onto DeepSeek Harness theme
-   tokens. This is the source of truth for the plugin's palettes.
-2. **`plugins/`** — the Cordis plugin definitions that apply those palettes in the
-   harness.
+- **OmaSeek** — the 22 Omarchy home-page themes as registered harness themes, with a
+  scheme-aware picker in **Settings → OmaSeek** and the Omarchy corner radii.
+- **OmaPixel** — the New Session hero's headline typewriter and the omarchy.org pixel field
+  behind it. **Settings → OmaPixel**: field Off/Ambient/Interactive, headline Loop/Once.
+- **OmaMusic** — the site's now-playing card over the harness's own audio. **Settings →
+  OmaMusic**.
 
-## Status
+`themes.md` in this repo is the research behind the palettes — every color of every theme,
+plus how each one maps onto a harness theme token. It is the **source of truth**: the Node
+half reads it at request time, so editing a hex there and reloading is all it takes to
+change a palette.
 
-| Part | State |
+## Install
+
+```
+dsh plugin --profile web add github:claudejaune/OmaSeek
+```
+
+Then restart the harness. The package contributes one Cordis row (`omaseek`), which is
+dual-face: the Node half serves the theme table and the audio over `/api/omaseek.*`, and the
+browser half registers the themes, the picker, the hero field and the music card.
+
+- From a checkout: `dsh plugin --profile web add /path/to/OmaSeek`
+- From npm, once published: `dsh plugin --profile web add omaseek`
+- Remove it: `dsh plugin --profile web remove omaseek`
+
+The repository is private for now, so a git install uses your own credentials — the same SSH
+key or token `gh` is already configured with.
+
+## What is in here
+
+| Path | What it is |
 |---|---|
-| Research (`themes.md`) | Complete — 22 themes, canonical + Omarchy-retuned values, DSH token mapping |
-| Plugin: single Tokyo Night toggle | Superseded by the full picker |
-| Plugin: OmaSeek (themes + corners) | Implemented — `plugins/omaseek.host.js` + `plugins/omaseek.client.js` |
-| Plugin: OmaPixel (New Session hero) | Implemented — `plugins/omapixel.client.js`, no Host half, switched in Settings → OmaPixel |
-| Plugin: OmaMusic (floating player) | Implemented — `plugins/omamusic.host.js` + `plugins/omamusic.client.js` |
+| `themes.md` | The palette research: 22 themes, their colors, the DSH token mapping |
+| `src/host.js`, `src/host/` | The Node half: `/api/omaseek.themes`, `/api/omaseek.music.*` |
+| `src/client.js`, `src/client/` | The browser half: themes + picker, hero field, music card |
+| `lib/client.js` | The built browser bundle the harness serves (committed — see *Building*) |
+| `cordis.patch.yml` | The bundle layer: the one row that mounts all of it |
+| `plugins/` | The older dynamic-package sources, kept for the in-session dev loop |
 
-## The plugins
+`plugins/` is how these features were first built: each was defined and run as a temporary
+dynamic Cordis package, re-definable while the process lives. That path has no install story
+— a dynamic package dies with the process and cannot be published — so `src/` is the
+supported copy. The two are the same behaviour; if you change a feature, change `src/`.
 
-Three independent dynamic Cordis Plugins, each re-defined and re-run on its own while the
-others keep running — OmaMusic untouched, OmaSeek for palettes and corners, OmaPixel for
-the New Session hero. **OmaSeek** itself is two halves applied as one Package:
+## The features
 
-- **`plugins/omaseek.host.js`** — reads `themes.md` through the `fs` Service, parses the
-  palette tables (§2, §4.1, §5.2, §7.2) and serves all 22 themes to the Client half over
-  the Package-private `omaseek.themes` RPC. **The doc stays the only place a hex value is
-  written**: change a color there and re-apply the Package.
-- **`plugins/omaseek.client.js`** — registers every theme with `theme.register()` and
-  contributes the **Settings → Omarchy** page: scheme chips, one card per theme with a
-  live miniature of its palette, and the active one marked.
+### OmaSeek — the themes
 
-### Scheme-aware picker
+Every theme is registered with `theme.register({ id, colorScheme, tokens })` and contributes
+the **Settings → OmaSeek** page: scheme chips, one card per theme with a live miniature of
+its palette, the active one marked.
 
-Each theme is registered with the `colorScheme` Omarchy assigns it, so every theme is
-half of a pair — a dark theme has no light variant. The picker therefore reads
+Each theme is registered with the `colorScheme` Omarchy assigns it, so every theme is half
+of a pair — a dark theme has no light variant. The picker therefore reads
 `getTheme().active.colorScheme` and lists only the themes belonging to the scheme now in
-force: the **5 light** palettes (`catppuccin-latte`, `flexoki-light`, `lupine`,
-`rose-pine`, `white`) while the app is light, the **17 dark** ones while it is dark. The
-Light / Dark / System chips switch the scheme — and with it, which set you can pick from.
+force: the **5 light** palettes (`catppuccin-latte`, `flexoki-light`, `lupine`, `rose-pine`,
+`white`) while the app is light, the **17 dark** ones while it is dark. The Light / Dark /
+System chips switch the scheme — and with it, which set you can pick from.
 
-The token pairs in `Theme.listTokens` are *not* this mechanism: a pair is one active
-theme's own light and dark values, not two themes.
+The token pairs in `Theme.listTokens` are *not* this mechanism: a pair is one active theme's
+own light and dark values, not two themes.
 
-### OmaPixel — the hero pixel field
+### OmaPixel — the hero
 
-**`plugins/omapixel.client.js`** is the whole Plugin: the headline typewriter and the
-field below, with no Host half at all — pure DOM and canvas, so it activates almost the
-moment it is approved. The only seam to OmaSeek is the page itself: the field reads the
-`--dsw-alias-*` tokens off `body` when it mounts and remounts on `theme/change`, so it
-follows whichever OmaSeek palette is in force, and paints with the shipped theme (or its
-own fallback inks) when OmaSeek is absent.
+**The headline.** The site's `TypewriterTail` rhythm, ported: type a phrase, hold 2.1 s,
+delete back to the front the current phrase and the next share — "We can fix every" — and
+type on, forever, with the site's per-key jitter, word pauses, and occasional hesitate. The
+typewriter owns the shipped title span's `textContent` while it runs and puts the product's
+own text back on stop.
 
-**The headline.** The site's `TypewriterTail` rhythm, ported: type a phrase, hold
-2.1 s, delete back to the front the current phrase and the next share — "We can fix
-every" — and type on, forever, with the site's per-key jitter, word pauses, and
-occasional hesitate. The typewriter owns the shipped title span's `textContent` while it
-runs and puts the product's own text back on stop.
+**The field.** The New Session hero sits in the omarchy.org hero's field: a lattice of square
+cells whose resting luminance comes from a drifting value-noise blob, dithered down to those
+cells with the same 8×8 Bayer matrix the site uses, lit further by the cursor, and stamped by
+a press with the Omarchy mark growing out of the click point and dissolving back through the
+dither. Ported from `references/omarchy-site/src/components/HeroPixelField.tsx`.
 
-The New Session hero sits in the omarchy.org hero's field: a lattice of square cells whose
-resting luminance comes from a drifting value-noise blob, dithered down to those cells with
-the same 8×8 Bayer matrix the site uses, lit further by the cursor, and stamped by a press
-with the Omarchy mark growing out of the click point and dissolving back through the dither.
-Ported from `references/omarchy-site/src/components/HeroPixelField.tsx`.
+It is the site's field, not an impression of it:
 
-Three pieces of the site's hero are deliberately left behind. The wordmark reveal is
-`src/lib/etch.ts` — `ttfx`, a WASM terminal engine the site loads as `/ttfx/0.3.2/ttfx.js`
-plus `effects/all.wasm` — and there is no Omarchy wordmark here to reveal; the same goes for
-the music spectrum, whose audio graph lives in OmaMusic, and for the wandering sprite that
-stamps the site's field while nobody is looking: this field answers the user and nothing
-else.
+- **The ramp is the site's**, per axis: `nx = (x − cx) / (width / 2)`, `ny = (y − h/2) / (h/2)`,
+  the clear oval `(rr − 0.42) / 0.85` eased², and the vertical gradient
+  `clamp((y − 24) / 130, 0.16, 1)` that keeps the top of the panel at 16 % and fades it in.
+- **The cells are derived, not fixed**: one cell is the wordmark slot (88 % of the panel less
+  a 48 px inset, capped at 896 px) over its **81** columns — about 11 CSS px, the site's own
+  density. A hard-coded 8 px cell is what made an earlier revision read as twice as busy.
+- **Nothing is clipped.** The canvas covers the panel and the ramp alone carves the clear
+  column, so there is no straight internal edge anywhere in the field.
+
+Three pieces of the site's hero are deliberately left behind: the wordmark reveal is `ttfx`, a
+WASM terminal engine the site loads as `/ttfx/0.3.2/ttfx.js` plus `effects/all.wasm`, and
+there is no Omarchy wordmark here to reveal; the music spectrum belongs to OmaMusic; and the
+wandering sprite that stamps the site's field while nobody is looking stays on the site —
+this field answers the user and nothing else.
 
 **Where it is mounted.** There is no backdrop Slot on the hero — `conversation.hero.*` only
-offers the brand mark, the workspace picker and the agent-preset control — so the canvas is
-a `z-index:-1` child of the conversation root while that root is in its `hero` phase, found
+offers the brand mark, the workspace picker and the agent-preset control — so the canvas is a
+`z-index:-1` child of the conversation root while that root is in its `hero` phase, found
 through `[data-phase="hero"]`. A `z-index:-1` child paints above the panel's own background
 and below everything the harness draws, and the host is given `isolation:isolate` because
-without a stacking context of its own the negative cell lands behind that background
-instead. No product element is restacked and no Slot is replaced; a `MutationObserver` on
-`data-phase` remounts the field as the hero arrives with the route and leaves with the first
-message.
+without a stacking context of its own the negative cell lands behind that background instead.
+No product element is restacked and no Slot is replaced; a `MutationObserver` on `data-phase`
+remounts the field as the hero arrives with the route and leaves with the first message.
 
-**How big it is.** The cells fill a band, not the panel: the composer column
-(`--dsw-composer-card-max-width`, centred on the composer seat) from three cells above the
-headline to three below the input card. The radial ramp keeps the middle clear of pixels,
-the same way the site keeps them off its wordmark, so the field reads as a frame around the
-hero copy.
-
-**Switching it.** Settings → OmaPixel has two rows. **Pixel field**: `Off` runs nothing, `Ambient`
-is the drifting lattice alone, and `Interactive` adds the cursor glow and the press
+**Switching it.** Settings → OmaPixel has two rows. **Pixel field**: `Off` runs nothing,
+`Ambient` is the drifting lattice alone, and `Interactive` adds the cursor glow and the press
 stamp. **Headline**: `Loop` is the site's rotation above, and `Once` is the earlier
-behaviour — one random phrase per load, typed once, then still. Nothing is persisted,
-like every other OmaSeek preference — dynamic Packages do not survive the process.
+behaviour — one random phrase per load, typed once, then still.
 
-### Verifying
+### OmaMusic
+
+The site's now-playing card, driven by the harness's own audio rather than a stream: the Node
+half reads a local music file and serves it in chunks, and the browser half plays it through
+an `Audio` element and paints the spectrum the card animates.
+
+The file it plays is `OMASEEK_MUSIC_PATH` if set, and otherwise the track shipped in
+`assets/music/`. A host with no audio file at that path stays silent — the card reports that
+rather than throwing.
+
+## Building
+
+The browser half is the only built artifact:
+
+```
+node build/bundle-client.mjs      # or: pnpm run build — writes lib/client.js
+```
+
+`lib/client.js` **is committed**. Git installs fetch sources, not built artifacts, and pnpm
+refuses to run a git dependency's build script until the user allowlists it — so committing
+the bundle is what lets `dsh plugin --profile web add github:…` work with no build permission
+and no prompt. `pnpm publish` rebuilds it anyway through `prepack`, so the npm tarball is
+never stale.
+
+**Source rules for `src/client/`** (the bundler enforces them and fails loudly):
+
+- Plain JavaScript ESM. No TypeScript, no JSX.
+- Imports are `react` — which comes off the page's module table, never a bundled copy — or a
+  relative `.js` path inside `src/client/`. Nothing else: a second React or a second Cordis
+  in the page would break the shell's own state.
+- Only `export function name(…)` and `export const name = …`. No default exports, no
+  `export { … } from`, no side-effect imports.
+- Shared browser helpers live in `src/client/dom.js`: `insertSheet(css, id)` for a stylesheet
+  the plugin owns and removes, `fetchJson(path)` for this package's own `/api/omaseek.*`
+  routes.
+
+The Node half is not built at all — it ships as the ESM in `src/host.js`, `main` points at
+it, and the host resolves `themes.md` and the music file relative to the installed package.
+
+## Layout of the seam
+
+A dynamic Cordis package gets `styles.insert(css)` and `host.call(method)` from its
+evaluator. An installed package gets neither, so:
+
+- **Styles** go in as a tagged `<style>` element owned by the registering fiber
+  (`insertSheet`), the way the shipped client plugins do it.
+- **Browser → Node** goes over the Connection Fetch bridge:
+  `ctx.connection.fetch.register({ path: '/api/omaseek.…', … })` on the Node half, an
+  ordinary same-origin `fetch()` in the browser half. The carrier authenticates and fences
+  `/api/*` before the plugin sees the request, so the plugin adds no auth of its own. Routes
+  must live under `/api/` with segments matching `^[A-Za-z0-9_$.-]+$`.
+
+A host with no browser surface (headless, TUI) has no `connection` service; both registrars
+return early rather than failing, so the package loads into any composition.
+
+## Releasing
+
+```
+pnpm version patch          # or minor / major
+pnpm publish                # prepack rebuilds lib/client.js
+```
+
+`publishConfig.access` is already `public`; nothing here is scoped, so no npm org is needed —
+only an npm account and an available name. Once published, `dsh plugin --profile web add
+omaseek` installs the prebuilt tarball with no build permission at all.
+
+For a git-based release, tag the commit (`git tag v0.1.0 && git push --tags`) so users can
+pin: `dsh plugin --profile web add github:claudejaune/OmaSeek#v0.1.0`.
+
+## Verifying the theme table
 
 ```
 node plugins/tools/extract-theme-table.mjs
@@ -104,12 +190,12 @@ node plugins/tools/extract-theme-table.mjs
 
 Parses the same tables independently and rewrites `plugins/themes.generated.js`, a flat
 snapshot of all 22 × 14 source colors. Commit it after editing `themes.md` so a palette
-change shows up as a reviewable diff; the plugin does not import it.
+change shows up as a reviewable diff; no runtime code imports it.
 
 ## How the theming works
 
-`theme.register({ id, colorScheme, tokens })` is the whole API surface here, and it is
-wider than `Theme.listTokens` suggests. `ui-layout`'s theme presenter
+`theme.register({ id, colorScheme, tokens })` is the whole API surface here, and it is wider
+than `Theme.listTokens` suggests. `ui-layout`'s theme presenter
 (`packages/client/ui-layout/src/client/theme-presenter.ts`) writes **every key** of the
 active theme onto `body` as an inline CSS variable and picks the base palette from
 `colorScheme` — so a registered theme may set any `--dsw-*` token, not just the 13 the
@@ -118,43 +204,41 @@ inspect API advertises:
 - **The 13 native tokens** (backgrounds, surfaces, borders, brand, text, state colors,
   sidebar fill) — the safe core, listed by `Theme.listTokens`.
 - **16 design-platform tokens outside that set** — `--dsw-specific-bubble`,
-  `--dsw-specific-input-major`, `--dsw-alias-label-tertiary`, `--dsw-alias-link`, the
-  markdown code blocks, menus and sidebar nav states. These need no CSS injection: a
-  registered theme's values are applied the same way as the native ones.
+  `--dsw-specific-input-major`, `--dsw-alias-label-tertiary`, `--dsw-alias-link`, the markdown
+  code blocks, menus and sidebar nav states. These need no CSS injection: a registered
+  theme's values are applied the same way as the native ones.
 
-Because a registered theme declares exactly one scheme, its `tokens` are plain values.
-The `{ light, dark }` pair form belongs to `overrideTokens()` layers only, and this plugin
-uses no layer.
+Because a registered theme declares exactly one scheme, its `tokens` are plain values. The
+`{ light, dark }` pair form belongs to `overrideTokens()` layers only, and this plugin uses no
+layer.
 
-**Derived colors.** Each theme's 14 source values expand to 29 tokens; the extras are
-blends of the source colors (`mix()` in the Client half). The user bubble is brand at
-12.15 % over the app background — the formula reproduces the blended column of `themes.md`
-§5.2 exactly (Tokyo Night `#2a312e`), and sidebar hover/active states are stepped off the
-sidebar fill itself so they stay visible on themes whose layers share one color.
+**Derived colors.** Each theme's 14 source values expand to 29 tokens; the extras are blends
+of the source colors (`mix()` in the browser half). The user bubble is brand at 12.15 % over
+the app background — the formula reproduces the blended column of `themes.md` §5.2 exactly
+(Tokyo Night `#2a312e`), and sidebar hover/active states are stepped off the sidebar fill
+itself so they stay visible on themes whose layers share one color.
 
 ### Two constraints worth knowing
 
 **Corner radius is not themeable.** Radii are hard-coded per component (user bubble 22px,
-composer card 22px, send button 999px) and there is no radius token in
-`design-platform.css`. Squaring them off would require targeting build-hashed CSS-module
-class names, which change on every rebuild. The plugin therefore squares only the
-controls it owns.
+composer card 22px, send button 999px) and there is no radius token in `design-platform.css`.
+Squaring them off would require targeting build-hashed CSS-module class names, which change on
+every rebuild. The plugin therefore squares only the controls it owns.
 
 **The assistant reply is not a bubble.** `--dsw-specific-bubble` styles the user (and
 steering) message only — `MessageItem.tsx`'s `UserStyleBubble` documents itself as
 "right-aligned bubble shared by user and steering rows". The assistant renders through
 `AssistantMarkdown`, which has no background declaration at all: it is plain text on
-`--dsw-alias-bg-base`, so it follows the text/background tokens and needs no surface
-color.
+`--dsw-alias-bg-base`, so it follows the text/background tokens and needs no surface color.
 
-**A picked theme is not persisted.** `setTheme()` only writes the built-in
-`light`/`dark`/`system` preference to settings, so an Omarchy theme is lost on reload —
-as is the registration itself, since dynamic Packages do not survive the process.
-
+**A picked theme is not persisted by the shell.** `setTheme()` only writes the built-in
+`light`/`dark`/`system` preference to settings, so an Omarchy theme can be lost on reload.
+The picker keeps the choice for the life of the page.
 
 ## Sources
 
 Omarchy's own palette values come from the [Omarchy repo](https://github.com/omacom/omarchy)
-(`themes/<id>/colors.toml`) and the home page's CSS bundle. Canonical palettes come from
-each theme's official project — links for all of them are in the Sources section of
-`themes.md`.
+(`themes/<id>/colors.toml`) and the home page's CSS bundle. Canonical palettes come from each
+theme's official project — links for all of them are in the Sources section of `themes.md`.
+The hero field and the now-playing card are ports of
+`omarchy.org`'s `HeroPixelField.tsx` and music card, kept under `references/`.

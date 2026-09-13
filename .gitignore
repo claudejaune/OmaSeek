@@ -15,4 +15,9 @@ pnpm-debug.log*
 
 # Todo and refs
 TODO.md
+handoff*.md
+HANDOFF*.md
 references/
+
+# Packed tarballs from a release check
+*.tgz
