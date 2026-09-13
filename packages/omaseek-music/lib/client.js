@@ -355,6 +355,8 @@ function applyFeature(host) {
 
   /** paused | loading | playing | failed. */
   var state = 'paused'
+  /** Why the card is not playing, when it is not. */
+  var failure = ''
   var touched = false
 
   /** Whether the meter is held by hand — clicking it freezes, clicking
@@ -469,6 +471,23 @@ function applyFeature(host) {
     }
   }
 
+  /**
+   * Whatever the sound needs before it can start. A streamed track needs
+   * nothing — the element fetches it — while a local file is read in windows
+   * first. Neither source at all is a failure the card reports.
+   */
+  function prepare() {
+    if (meta === null) {
+      if (failure === '') failure = 'The track could not be loaded'
+      return Promise.reject(new Error('omaseek: no track'))
+    }
+    if (typeof meta.url === 'string' && meta.url !== '') return Promise.resolve()
+    if (meta.size > 0) return fetchTrack()
+    // Nothing to play, and no better reason already on the card.
+    if (failure === '') failure = 'No track is set'
+    return Promise.reject(new Error('omaseek: no track'))
+  }
+
   /** Stitch the MP3 windows into one Blob URL. */
   function fetchTrack() {
     var parts = []
@@ -500,12 +519,28 @@ function applyFeature(host) {
     return step()
   }
 
+  /**
+   * Where the sound comes from: the URL this package serves (the station's own
+   * copy of the track), or — when a local file was named instead — the blob the
+   * chunk route fed us. Never both, and possibly neither.
+   */
+  function source() {
+    if (meta !== null && typeof meta.url === 'string' && meta.url !== '') return meta.url
+    return objectUrl
+  }
+
   /** Wire the media element through the analyser, straight to the speakers. */
   function wire() {
     audio = new Audio()
     audio.loop = true
     audio.preload = 'auto'
-    audio.src = objectUrl
+    var streamed = source() !== objectUrl
+    if (streamed) {
+      // Reading a cross-origin stream through the analyser needs the host to
+      // allow it; the radio does. If it does not, `onError` retries without.
+      audio.crossOrigin = 'anonymous'
+    }
+    audio.src = source()
     audio.addEventListener('playing', function () {
       running = true
       if (state === 'loading') {
@@ -522,7 +557,22 @@ function applyFeature(host) {
     audio.addEventListener('pause', function () {
       running = false
     })
+    var retried = false
     audio.addEventListener('error', function () {
+      // A streamed track from a host that sends no CORS headers fails outright
+      // while `crossOrigin` is set. Dropping it keeps the sound and loses only
+      // the meter; a second failure means the track cannot be reached at all —
+      // no network, no station, no file.
+      if (streamed && !retried) {
+        retried = true
+        audio.crossOrigin = null
+        audio.src = source()
+        audio.load()
+        var again = audio.play()
+        if (again !== undefined && again.catch !== undefined) again.catch(function () {})
+        return
+      }
+      failure = 'The track could not be reached'
       state = 'failed'
       announce()
     })
@@ -553,13 +603,14 @@ function applyFeature(host) {
     // would throw out of the click handler and leave the card on "loading"
     // forever. Saying so is the honest answer.
     if (meta === null) {
+      failure = 'The track could not be loaded'
       state = 'failed'
       announce()
       return
     }
     state = 'loading'
     announce()
-    var ready = audio === null ? fetchTrack() : Promise.resolve()
+    var ready = audio === null ? prepare() : Promise.resolve()
     ready.then(function () {
       if (disposed) return
       if (audio === null) wire()
@@ -610,8 +661,9 @@ function applyFeature(host) {
       // A host with no track answers 200 with size 0 rather than failing the
       // request — the card reports that instead of throwing out of its own
       // fulfillment handler, which no rejection handler can catch.
-      if (result.size === 0) {
+      if (result.size === 0 && (typeof result.url !== 'string' || result.url === '')) {
         meta = result
+        failure = 'No track is set'
         state = 'failed'
         announce()
         return
@@ -639,7 +691,14 @@ function applyFeature(host) {
       if (clockZero === null) clockZero = performance.now()
       announce()
     }, function (error) {
+      // No meta means no track and no art: say so on the card rather than
+      // leaving it looking idle. Offline is the usual reason.
       console.error('omamusic: ' + String((error && error.message) || error))
+      if (!alive) return
+      meta = { title: TRACK.title, artist: TRACK.artist, url: '', size: 0, art: '', timeline: null, icons: null }
+      failure = 'The track could not be loaded'
+      state = 'failed'
+      announce()
     })
     return function () {
       alive = false
@@ -814,7 +873,7 @@ function applyFeature(host) {
         h('span', { className: 'omamusic-tip-artist' }, TRACK.artist)),
       h('span', { className: 'omamusic-text' },
         h('span', { className: 'omamusic-title' },
-          state === 'failed' ? 'The sound could not start' : shortTitle(TRACK.title)),
+          state === 'failed' ? failure : shortTitle(TRACK.title)),
         h('span', { className: 'omamusic-byline' },
           h('span', { className: 'omamusic-artist' }, TRACK.artist),
           h('span', { 'aria-hidden': 'true', ref: readoutRef, className: 'omamusic-readout' }))),

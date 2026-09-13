@@ -19,8 +19,8 @@ work. Omarchy is MIT licensed; the text is in
 ## The track
 
 *We Can Fix Everything (The Ultimate Machine)* is [Kevin Koontz's](https://x.com/koozeex1), by
-way of Omarchy Radio. It is not included here — OmaMusic plays a file of your own, via
-`OMASEEK_MUSIC_PATH`. Good tune.
+way of Omarchy Radio, and OmaMusic streams it from the station that hosts it. The cover art
+travels with the package. Good tune.
 
 ## Thanks
 

@@ -122,6 +122,61 @@ const windowStub = {
   },
 }
 
+/** What the stubbed media element does when asked to play. */
+let audioMode = 'ok'
+
+/**
+ * A media element that reports back the way a real one does: metadata, then
+ * either `playing` or — for a host that cannot be reached — `error`.
+ */
+class FakeAudio {
+  constructor() {
+    this.listeners = {}
+    this.src = ''
+    this.crossOrigin = null
+    this.currentTime = 0
+    this.duration = 0
+    this.paused = true
+  }
+  addEventListener(type, fn) { (this.listeners[type] = this.listeners[type] || []).push(fn) }
+  removeEventListener() {}
+  emit(type) { for (const fn of this.listeners[type] || []) fn({ type }) }
+  load() {}
+  pause() { this.paused = true; this.emit('pause') }
+  play() {
+    setTimeout(() => {
+      if (audioMode === 'error') { this.emit('error'); return }
+      this.duration = 210
+      this.paused = false
+      this.emit('loadedmetadata')
+      this.emit('playing')
+    }, 0)
+    return Promise.resolve()
+  }
+}
+
+class FakeAudioContext {
+  constructor() {
+    this.state = 'running'
+    this.sampleRate = 48000
+    this.destination = {}
+  }
+  createAnalyser() {
+    return {
+      fftSize: 0, smoothingTimeConstant: 0, frequencyBinCount: 1024,
+      connect() {}, getFloatFrequencyData() {},
+    }
+  }
+  createMediaElementSource() { return { connect() {} } }
+  resume() { return Promise.resolve() }
+  close() {}
+}
+
+globalThis.Audio = FakeAudio
+globalThis.AudioContext = FakeAudioContext
+// The local-file path stitches its windows into a blob URL.
+URL.createObjectURL = () => 'blob:smoke'
+URL.revokeObjectURL = () => {}
 globalThis.window = windowStub
 globalThis.document = documentStub
 globalThis.getComputedStyle = windowStub.getComputedStyle
@@ -156,6 +211,11 @@ const TIMELINE = { duration: 210, fps: 30, bands: 48, spectrum: Buffer.from([1, 
 const WITH_TRACK = { title: 'T', artist: 'A', size: 4096, art: '', timeline: TIMELINE, icons: null }
 const NO_TRACK = { title: 'T', artist: 'A', size: 0, art: '', timeline: null, icons: null }
 const NO_TIMELINE = { title: 'T', artist: 'A', size: 4096, art: '', timeline: null, icons: null }
+/** Streamed from the station: a URL, no bytes of ours, no analysis to match. */
+const STREAMED = {
+  title: 'T', artist: 'A', url: 'https://radio.example/track.mp3',
+  size: 0, art: 'data:image/webp;base64,AA==', timeline: null, icons: null,
+}
 
 /* ── the three packages, and what each must do alone ───────────────────── */
 
@@ -185,10 +245,13 @@ const PACKAGES = [
     label: 'OmaMusic (card)',
     expect: { sections: [], overlays: 1, themes: 0 },
     cases: [
-      { label: 'a track with a timeline', meta: WITH_TRACK },
-      { label: 'no track', meta: NO_TRACK },
-      { label: 'a track of your own, no timeline', meta: NO_TIMELINE },
-      { label: 'a route that fails', meta: null },
+      { label: 'streamed from the station', meta: STREAMED, expectFailure: null },
+      { label: 'streamed, and the station cannot be reached', meta: STREAMED, play: true, audio: 'error', expectFailure: 'The track could not be reached' },
+      { label: 'streamed, and it plays', meta: STREAMED, play: true, audio: 'ok', expectFailure: null },
+      { label: 'a local file with its timeline', meta: WITH_TRACK, play: true, audio: 'ok', expectFailure: null },
+      { label: 'no track at all', meta: NO_TRACK, play: true, expectFailure: 'No track is set' },
+      { label: 'a local file with no analysis', meta: NO_TIMELINE, play: true, audio: 'ok', expectFailure: null },
+      { label: 'a route that fails', meta: null, play: true, expectFailure: 'The track could not be loaded' },
     ],
   },
 ]
@@ -257,6 +320,7 @@ function jsonResponse(value) {
 /** Render every registered component, children and all. */
 function renderAll(calls, problems) {
   const rendered = []
+  const nodes = []
   function renderNode(node) {
     if (node === null || node === undefined || typeof node === 'boolean') return
     if (typeof node === 'string' || typeof node === 'number') return
@@ -273,6 +337,7 @@ function renderAll(calls, problems) {
       renderNode(node.type(node.props))
       return
     }
+    nodes.push(node)
     for (const child of node.children) renderNode(child)
     const nested = node.props === undefined ? undefined : node.props.children
     if (nested !== undefined) renderNode(nested)
@@ -286,7 +351,21 @@ function renderAll(calls, problems) {
       problems.push(`${options.name} "${options.id || options.key || ''}" threw on render: ${error.message}`)
     }
   }
-  return rendered
+  return { rendered, nodes }
+}
+
+/** Every string a component renders, for asserting what the card says. */
+function textsOf(component) {
+  const out = []
+  const walk = (node) => {
+    if (node === null || node === undefined || typeof node === 'boolean') return
+    if (typeof node === 'string' || typeof node === 'number') { out.push(String(node)); return }
+    if (Array.isArray(node)) { for (const child of node) walk(child); return }
+    if (typeof node.type === 'function') { walk(node.type(node.props)); return }
+    for (const child of node.children) walk(child)
+  }
+  walk(React.createElement(component, {}))
+  return out
 }
 
 async function runCase(pkg, testCase) {
@@ -299,6 +378,9 @@ async function runCase(pkg, testCase) {
 
   globalThis.fetch = async (path) => {
     if (path === '/api/omaseek.themes') return jsonResponse(THEMES)
+    if (path.indexOf('/api/omaseek.music.chunk') === 0) {
+      return { ok: true, status: 200, async arrayBuffer() { return new ArrayBuffer(4096) } }
+    }
     if (path === '/api/omaseek.music.meta') {
       if (testCase.meta === null) return { ok: false, status: 500, async json() { return { error: 'nope' } } }
       return jsonResponse(testCase.meta === undefined ? NO_TRACK : testCase.meta)
@@ -344,7 +426,36 @@ async function runCase(pkg, testCase) {
     }
   }
 
-  const rendered = renderAll(calls, problems)
+  const { rendered, nodes } = renderAll(calls, problems)
+
+  // Press play the way the page would, with the media element answering or
+  // failing, and check the card says something rather than sitting on
+  // "loading" forever.
+  audioMode = testCase.audio === undefined ? 'ok' : testCase.audio
+  if (testCase.play === true) {
+    const play = nodes.find((node) => typeof node.props['aria-label'] === 'string'
+      && node.props['aria-label'].indexOf('Play the track') === 0
+      && typeof node.props.onClick === 'function')
+    if (play === undefined) problems.push('no play control on the card')
+    else {
+      try {
+        play.props.onClick()
+      } catch (error) {
+        problems.push(`pressing play threw: ${error.message}`)
+      }
+      await new Promise((done) => setTimeout(done, 30))
+    }
+    if (testCase.expectFailure !== undefined) {
+      const card = calls.registered.find((entry) => entry.options.name === 'shell.overlay')
+      const texts = card === undefined ? [] : textsOf(card.component)
+      if (testCase.expectFailure === null) {
+        const wrong = texts.filter((text) => /could not|No track is set/.test(text))
+        if (wrong.length > 0) problems.push(`the card reports a failure it should not: ${wrong.join(', ')}`)
+      } else if (!texts.includes(testCase.expectFailure)) {
+        problems.push(`the card does not say "${testCase.expectFailure}" (it says: ${texts.join(' | ')})`)
+      }
+    }
+  }
 
   // Teardown: every disposer the feature handed over must run clean, because a
   // throwing cleanup takes the plugin's unload with it.

@@ -22,8 +22,8 @@
 import { fileURLToPath } from 'node:url'
 import { fileSize, readBytes, readText } from './files.js'
 
-/** The plugin's own files, shipped beside this module. */
-const MUSIC_DIR = new URL('../assets/music/', import.meta.url)
+/** The cover art ships with the package. */
+const ART_URL = new URL('../art/cover.webp', import.meta.url)
 
 /** The single track, exactly as omarchy.org ships it on its home page. */
 const TRACK = {
@@ -31,30 +31,45 @@ const TRACK = {
   artist: 'Kevin Koontz',
 }
 
-/**
- * One file, one setting. The defaults point at this checkout's own copies —
- * which a published install does not have — so the environment is how anyone
- * else chooses what plays.
- */
-function envPath(name, fallback) {
+/** The station that hosts the track, streamed from there rather than shipped. */
+const RADIO_TRACK = 'https://radio.omarchy.org/tracks/'
+  + 'kevin-koontz-we-can-fix-everything-the-ultimate-machine.mp3'
+
+/** A setting, or nothing when it is unset or blank. */
+function envValue(name) {
   const value = process.env[name]
-  if (value !== undefined && value.trim() !== '') return value.trim()
-  return fileURLToPath(new URL(fallback, MUSIC_DIR))
+  if (value === undefined || value.trim() === '') return undefined
+  return value.trim()
 }
 
-/** The mp3 this card plays. Nothing plays until `OMASEEK_MUSIC_PATH` names one. */
+/**
+ * The track to stream. `OMASEEK_MUSIC_URL` points the card somewhere else; with
+ * no setting it plays the station's own copy of this track.
+ */
+function trackUrl() {
+  return envValue('OMASEEK_MUSIC_URL') === undefined ? RADIO_TRACK : envValue('OMASEEK_MUSIC_URL')
+}
+
+/**
+ * A local file to play instead of streaming, when `OMASEEK_MUSIC_PATH` names
+ * one. The card reads it in windows over the chunk route.
+ */
 function trackPath() {
-  return envPath('OMASEEK_MUSIC_PATH', 'kevin_koontz-we_can_fix_everything.mp3')
+  return envValue('OMASEEK_MUSIC_PATH')
 }
 
-/** Optional album art; the card draws its own placeholder without it. */
-function artPath() {
-  return envPath('OMASEEK_MUSIC_ART', 'kevin_koontz-we_can_fix_everything.webp')
-}
-
-/** Optional analysed spectrum, so the meter moves while the sound is paused. */
+/** The analysed spectrum, for a local file that has one beside it. */
 function timelinePath() {
-  return envPath('OMASEEK_MUSIC_TIMELINE', 'track.json')
+  const override = envValue('OMASEEK_MUSIC_TIMELINE')
+  if (override !== undefined) return override
+  const local = trackPath()
+  if (local === undefined) return undefined
+  return local.replace(/\.[^./\\]+$/, '') + '.json'
+}
+
+/** The cover art, streamed from a URL when one is set. */
+function artUrl() {
+  return envValue('OMASEEK_MUSIC_ART')
 }
 
 /** Max bytes one `music.chunk` request may ask for. */
@@ -92,28 +107,30 @@ function registerMetaRoute(ctx) {
   let heavy = null
 
   async function metaOnce() {
-    const path = trackPath()
-    const size = await fileSize(ctx, path)
-    if (size === 0) {
-      console.error('omaseek: no music file at ' + path + ' — the card will stay silent')
-      return { title: TRACK.title, artist: TRACK.artist, size: 0, art: '', timeline: null, icons: null }
+    const local = trackPath()
+    const size = local === undefined ? 0 : await fileSize(ctx, local)
+    if (local !== undefined && size === 0) {
+      console.error('omaseek: no music file at ' + local + ' — the card will say so')
+      return { title: TRACK.title, artist: TRACK.artist, url: '', size: 0, art: '', timeline: null, icons: null }
     }
     if (heavy === null) {
-      // Art and timeline belong to the shipped track, not to whatever file the
-      // environment points at, so both are optional: a track of your own plays
-      // without either, and the card falls back to the live analyser.
+      // Art is ours to ship; the timeline is an analysis of one particular file,
+      // so it is optional and only read when there is a local file to match it.
       let art = ''
       try {
-        const artBytes = await readBytes(ctx, artPath(), undefined, 1 << 20)
+        const artBytes = await readBytes(ctx, fileURLToPath(ART_URL), undefined, 1 << 20)
         art = 'data:image/webp;base64,' + Buffer.from(artBytes).toString('base64')
       } catch (missing) {
         // No art: the card's ring pulses over an empty plate.
       }
       let timeline = null
-      try {
-        timeline = JSON.parse(await readText(ctx, timelinePath()))
-      } catch (missing) {
-        // No analysis: the meter reads the live audio instead of the timeline.
+      const analysis = timelinePath()
+      if (analysis !== undefined) {
+        try {
+          timeline = JSON.parse(await readText(ctx, analysis))
+        } catch (missing) {
+          // No analysis: the meter reads the live audio instead of the timeline.
+        }
       }
       heavy = {
         title: TRACK.title,
@@ -122,9 +139,14 @@ function registerMetaRoute(ctx) {
         timeline: timeline,
         icons: null,
       }
-      console.log('omaseek: serving "' + TRACK.title + '" from ' + path)
+      console.log('omaseek: serving "' + TRACK.title + '"')
     }
-    return Object.assign({}, heavy, { size: size })
+    // One of the two: a local file the chunk route feeds, or a URL the browser
+    // streams from. Never both.
+    const source = local === undefined
+      ? { url: trackUrl(), size: 0 }
+      : { url: '', size: size }
+    return Object.assign({}, heavy, source)
   }
 
   ctx.effect(function () {

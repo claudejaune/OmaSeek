@@ -131,27 +131,34 @@ behaviour — one random phrase per load, typed once, then still.
 
 ### OmaMusic
 
-The site's now-playing card, driven by a local file rather than a stream: the Node half reads
-it in chunks and the browser half plays it through an `Audio` element, painting the spectrum
-the card animates.
+The site's now-playing card: the browser half plays the track through an `Audio` element and
+paints the spectrum the card animates.
 
-**It ships no music** — the track omarchy.org plays is
-[Kevin Koontz's](https://x.com/koozeex1), and it is not ours to ship. Point the plugin at a
-file of your own instead:
+**It streams the track from the station that hosts it** —
+`radio.omarchy.org/tracks/kevin-koontz-we-can-fix-everything-the-ultimate-machine.mp3`, which
+serves it with CORS open (so the meter can read the audio) and range requests (so seeking
+works). No audio ships with this package; the cover art does.
 
 ```sh
-OMASEEK_MUSIC_PATH=/home/you/Music/track.mp3          # what plays (required for sound)
-OMASEEK_MUSIC_ART=/home/you/Music/track.webp          # optional: album art
-OMASEEK_MUSIC_TIMELINE=/home/you/Music/track.json     # optional: analysed spectrum
+OMASEEK_MUSIC_URL=https://example.com/other-track.mp3   # stream something else
+OMASEEK_MUSIC_PATH=/home/you/Music/track.mp3            # …or play a local file instead
+OMASEEK_MUSIC_ART=https://example.com/cover.webp        # cover art, streamed
+OMASEEK_MUSIC_TIMELINE=/home/you/Music/track.json       # analysed spectrum, for a local file
 ```
 
-The two extras belong to the track they were made for, so both are optional: without art the
-card draws its own plate, and without a timeline the meter follows the live audio and the
-duration comes off the file itself. With nothing set at all the card stays silent and says
-so, rather than throwing.
+A local file wins over the URL: the Node half reads it in windows and stiches them into a
+blob. The cover art ships with the package, so setting `OMASEEK_MUSIC_ART` is only for
+replacing it. The analysed timeline belongs to one particular file, so it is only used when a
+local file is named — the station's copy is a different master. Without a timeline the meter
+follows the live audio and the duration comes off the file itself.
 
-`assets/` in this checkout keeps the site's own copies for development, untracked — see
-`.gitignore` for why they are not in the repository.
+A stream needs the host to allow cross-origin reads for the meter; if it does not, the card
+retries without CORS, plays the sound, and leaves the meter flat. Everything else that can go
+wrong is said on the card rather than thrown: no network, an unreachable station, a missing
+file, or nothing configured at all. The play button stays live, so it can be pressed again
+once the network is back.
+
+`assets/music/` in this checkout keeps a local copy of the track for development, untracked.
 
 ## Building
 
