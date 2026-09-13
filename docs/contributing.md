@@ -5,7 +5,6 @@ out.
 
 ## What is in here
 
-
 | Path | What it is |
 |---|---|
 | `packages/omaseek-themes/` | The 22 themes, the scheme-aware picker, the corner shapes — and `themes.md`, the palette research behind them |
@@ -14,13 +13,11 @@ out.
 | `build/` | The bundler that turns each browser half into what the harness serves, and the test suite |
 | `tools/` | The palette-table extractor and its generated snapshot |
 | `docs/` | This file, and [how-it-works.md](how-it-works.md) |
-| `themes.md` | The palette research, inside the themes package: every color, and the harness tokens it maps to |
 
 Each package is self-contained: its own Node half, its own browser half, its own built bundle
 and its own row. Any one of them runs on its own.
 
 ## Building
-
 
 ```
 pnpm build      # writes each package's lib/client.js
@@ -51,7 +48,6 @@ resolves its own data (`themes.md`, the music file) relative to the installed pa
 
 ## Verifying the theme table
 
-
 ```
 node tools/extract-theme-table.mjs
 ```
@@ -62,7 +58,6 @@ change shows up as a reviewable diff; no runtime code imports it — the Node ha
 `themes.md` directly, so the doc stays the only place a hex value is written.
 
 ## Releasing
-
 
 ```
 pnpm -r publish --access public     # or: pnpm publish:all

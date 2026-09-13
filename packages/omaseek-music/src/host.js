@@ -67,11 +67,6 @@ function timelinePath() {
   return local.replace(/\.[^./\\]+$/, '') + '.json'
 }
 
-/** The cover art, streamed from a URL when one is set. */
-function artUrl() {
-  return envValue('OMASEEK_MUSIC_ART')
-}
-
 /** Max bytes one `music.chunk` request may ask for. */
 const CHUNK_MAX = 1 << 20
 

@@ -5,12 +5,12 @@ reaches the Node side. Nothing here is needed to use the plugins.
 
 ## The features
 
-
 ### OmaThemes — the themes
 
 Every theme is registered with `theme.register({ id, colorScheme, tokens })` and contributes
 the **Settings → OmaThemes** page: scheme chips, one card per theme with a live miniature of
-its palette, the active one marked.
+its palette, the active one marked, and the corner shape (squircle or square) for the whole
+harness.
 
 **It opens on Catppuccin.** With nothing chosen, a light UI gets **Catppuccin Latte** and a
 dark one gets **Catppuccin** — the pair Omarchy itself opens on. The picker follows the
@@ -78,10 +78,11 @@ without a stacking context of its own the negative cell lands behind that backgr
 No product element is restacked and no Slot is replaced; a `MutationObserver` on `data-phase`
 remounts the field as the hero arrives with the route and leaves with the first message.
 
-**Switching it.** Settings → OmaPixel has two rows. **Pixel field**: `Off` runs nothing,
-`Ambient` is the drifting lattice alone, and `Interactive` adds the cursor glow and the press
-stamp. **Headline**: `Loop` is the site's rotation above, and `Once` is the earlier
-behaviour — one random phrase per load, typed once, then still.
+**Switching it.** Settings → OmaPixel has two settings, each with its chips under a line of
+description. **Pixel field** — `Off` runs nothing, `Ambient` is the drifting lattice alone,
+`Interactive` adds the cursor glow and the press stamp; the page says a refresh is needed for
+that one to take. **Headline** — `Loop` is the site's rotation above, `Once` types one random
+phrase per load and stops.
 
 ### OmaMusic
 
@@ -95,16 +96,15 @@ works). No audio ships with this package; the cover art does.
 
 ```sh
 OMASEEK_MUSIC_URL=https://example.com/other-track.mp3   # stream something else
-OMASEEK_MUSIC_PATH=~/Music/track.mp3            # …or play a local file instead
-OMASEEK_MUSIC_ART=https://example.com/cover.webp        # cover art, streamed
-OMASEEK_MUSIC_TIMELINE=~/Music/track.json       # analysed spectrum, for a local file
+OMASEEK_MUSIC_PATH=~/Music/track.mp3                    # …or play a local file instead
+OMASEEK_MUSIC_TIMELINE=~/Music/track.json               # analysed spectrum, for a local file
 ```
 
-A local file wins over the URL: the Node half reads it in windows and stiches them into a
-blob. The cover art ships with the package, so setting `OMASEEK_MUSIC_ART` is only for
-replacing it. The analysed timeline belongs to one particular file, so it is only used when a
-local file is named — the station's copy is a different master. Without a timeline the meter
-follows the live audio and the duration comes off the file itself.
+A local file wins over the URL: the Node half reads it in windows and stitches them into a
+blob. The cover art ships with the package. The analysed timeline belongs to one particular
+file, so it is used only for a local file (or when one is named outright) — the station's copy
+is a different master. Without a timeline the meter follows the live audio and the duration
+comes off the file itself.
 
 A stream needs the host to allow cross-origin reads for the meter; if it does not, the card
 retries without CORS, plays the sound, and leaves the meter flat. Everything else that can go
@@ -112,10 +112,10 @@ wrong is said on the card rather than thrown: no network, an unreachable station
 file, or nothing configured at all. The play button stays live, so it can be pressed again
 once the network is back.
 
-`assets/music/` in this checkout keeps a local copy of the track for development, untracked.
+`packages/omaseek-music/assets/music/` in this checkout keeps a local copy of the track for
+development, untracked.
 
 ## Layout of the seam
-
 
 A browser half reaches the page and the Node process through two seams:
 
@@ -129,11 +129,10 @@ A browser half reaches the page and the Node process through two seams:
   `/api/*` before the plugin sees the request, so the plugin adds no auth of its own. Routes
   must live under `/api/` with segments matching `^[A-Za-z0-9_$.-]+$`.
 
-A host with no browser surface (headless, TUI) has no `connection` service; both registrars
-return early rather than failing, so the package loads into any composition.
+A host with no browser surface (headless, TUI) has no `connection` service; a registrar
+returns early rather than failing, so each plugin loads into any composition.
 
 ## How the theming works
-
 
 `theme.register({ id, colorScheme, tokens })` is the whole API surface here, and it is wider
 than `Theme.listTokens` suggests. `ui-layout`'s theme presenter
@@ -144,7 +143,7 @@ inspect API advertises:
 
 - **The 13 native tokens** (backgrounds, surfaces, borders, brand, text, state colors,
   sidebar fill) — the safe core, listed by `Theme.listTokens`.
-- **16 design-platform tokens outside that set** — `--dsw-specific-bubble`,
+- **17 design-platform tokens outside that set** — `--dsw-specific-bubble`,
   `--dsw-specific-input-major`, `--dsw-alias-label-tertiary`, `--dsw-alias-link`, the markdown
   code blocks, menus and sidebar nav states. These need no CSS injection: a registered
   theme's values are applied the same way as the native ones.
@@ -153,7 +152,7 @@ Because a registered theme declares exactly one scheme, its `tokens` are plain v
 `{ light, dark }` pair form belongs to `overrideTokens()` layers only, and this plugin uses no
 layer.
 
-**Derived colors.** Each theme's 14 source values expand to 29 tokens; the extras are blends
+**Derived colors.** Each theme's 15 source values expand to 30 tokens; the extras are blends
 of the source colors (`mix()` in the browser half). The user bubble is brand at 12.15 % over
 the app background — the formula reproduces the blended column of `themes.md` §5.2 exactly
 (Tokyo Night `#2a312e`), and sidebar hover/active states are stepped off the sidebar fill
@@ -178,9 +177,9 @@ choice per scheme in `localStorage` (`omaseek.themes`) and re-applies it on load
 
 ## Sources
 
-
 Omarchy's own palette values come from the [Omarchy repo](https://github.com/omacom/omarchy)
 (`themes/<id>/colors.toml`) and the home page's CSS bundle. Canonical palettes come from each
 theme's official project — links for all of them are in the Sources section of `themes.md`.
 The hero field and the now-playing card are ports of
-`omarchy.org`'s `HeroPixelField.tsx` and its music card.
+`omarchy.org`'s `HeroPixelField.tsx` and its music card, and the track the card streams lives
+at `radio.omarchy.org`.
