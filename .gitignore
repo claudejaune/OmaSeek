@@ -24,3 +24,7 @@ references/
 # The dynamic-package copies of the same features: kept in the working tree for
 # the in-session dev loop, never published. src/ is the supported copy.
 plugins/
+
+# The site's track and artwork: Kevin Koontz's recording, not ours to ship.
+# Kept locally for development; point OMASEEK_MUSIC_PATH at a track of your own.
+assets/

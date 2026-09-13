@@ -199,6 +199,16 @@ const HOSTS = [
     expectApplied: 'omarchy-tokyo-night',
   },
   {
+    label: 'own track with no timeline',
+    themes: THEMES,
+    // A file of your own with no analysed spectrum beside it: playable, and the
+    // card must not treat the missing timeline as a missing track.
+    meta: { title: 'T', artist: 'A', size: 4096, art: '', timeline: null, icons: null },
+    expectThemes: 4,
+    scheme: 'dark',
+    expectApplied: 'omarchy-catppuccin',
+  },
+  {
     label: 'remembered opt-out',
     themes: THEMES,
     meta: { title: 'T', artist: 'A', size: 0, art: '', timeline: null, icons: null },

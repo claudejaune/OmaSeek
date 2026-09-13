@@ -15,10 +15,10 @@
     "lib/client.js",
     "cordis.patch.yml",
     "themes.md",
-    "assets/music",
-    "assets/icons",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "CREDITS.md",
+    "LICENSES"
   ],
   "scripts": {
     "build": "node build/bundle-client.mjs",

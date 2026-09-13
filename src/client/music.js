@@ -400,6 +400,15 @@ export function applyFeature(host) {
       state = 'failed'
       announce()
     })
+    // The file knows how long it is, which is what a track with no analysed
+    // timeline relies on for its progress line and its seek.
+    audio.addEventListener('loadedmetadata', function () {
+      if (duration <= 0 && isFinite(audio.duration) && audio.duration > 0) {
+        duration = audio.duration
+        clockZero = performance.now() - audio.currentTime * 1000
+        announce()
+      }
+    })
     audioContext = new AudioContext()
     analyser = audioContext.createAnalyser()
     analyser.fftSize = FFT_SIZE
@@ -472,16 +481,24 @@ export function applyFeature(host) {
     fetchJson('/api/omaseek.music.meta').then(function (result) {
       if (!alive) return
       var tl = result.timeline
-      // A host with no track answers 200 with a null timeline rather than
-      // failing the request — the card reports that instead of throwing out
-      // of its own fulfillment handler, which no rejection handler can catch.
-      if (tl === null || tl === undefined) {
+      // A host with no track answers 200 with size 0 rather than failing the
+      // request — the card reports that instead of throwing out of its own
+      // fulfillment handler, which no rejection handler can catch.
+      if (result.size === 0) {
         meta = result
         state = 'failed'
         announce()
         return
       }
       meta = result
+      // A track of your own may have no analysed timeline beside it. It still
+      // plays: the duration comes off the file itself (see `wire`), and the
+      // paused meter falls back to the live analyser.
+      if (tl === null || tl === undefined) {
+        console.log('omamusic: no timeline for this track; the meter will follow the audio')
+        announce()
+        return
+      }
       if (result.icons !== null && result.icons !== undefined
           && result.icons.play && result.icons.pause
           && Array.isArray(result.icons.play.cells) && Array.isArray(result.icons.pause.cells)) {

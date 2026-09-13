@@ -1,9 +1,14 @@
 /**
  * OmaMusic — the Omarchy site's music card. Node half.
  *
- * Serves the three files the site ships for its house track — the MP3, the
- * album art, and the analysed spectrum timeline — to this package's browser
- * half over two Connection Fetch routes, plus the transport glyphs.
+ * Serves the track this machine has — the MP3, and optionally its album art
+ * and an analysed spectrum timeline — to this package's browser half over two
+ * Connection Fetch routes.
+ *
+ * None of those files are distributed with the package: the track omarchy.org
+ * plays is Kevin Koontz's, and it is not ours to ship. Point
+ * `OMASEEK_MUSIC_PATH` at a file of your own instead; the art and timeline are
+ * optional extras beside it.
  *
  * Routing the bytes rather than the JSON window the dynamic Package used is
  * the reason this half exists at all: `/api/omaseek.music.chunk` answers a byte
@@ -21,7 +26,6 @@ import { fileSize, readBytes, readText } from './files.js'
 
 /** The plugin's own files, shipped beside this module. */
 const MUSIC_DIR = new URL('../../assets/music/', import.meta.url)
-const ICONS_URL = new URL('../../assets/icons/transport.json', import.meta.url)
 
 /** The single track, exactly as omarchy.org ships it on its home page. */
 const TRACK = {
@@ -29,16 +33,31 @@ const TRACK = {
   artist: 'Kevin Koontz',
 }
 
-/** The mp3 this card plays. `OMASEEK_MUSIC_PATH` swaps in a track of your own. */
-function trackPath() {
-  const override = process.env.OMASEEK_MUSIC_PATH
-  if (override !== undefined && override.trim() !== '') return override.trim()
-  return fileURLToPath(new URL('kevin_koontz-we_can_fix_everything.mp3', MUSIC_DIR))
+/**
+ * One file, one setting. The defaults point at this checkout's own copies —
+ * which a published install does not have — so the environment is how anyone
+ * else chooses what plays.
+ */
+function envPath(name, fallback) {
+  const value = process.env[name]
+  if (value !== undefined && value.trim() !== '') return value.trim()
+  return fileURLToPath(new URL(fallback, MUSIC_DIR))
 }
 
-const ART_PATH = fileURLToPath(new URL('kevin_koontz-we_can_fix_everything.webp', MUSIC_DIR))
-const TIMELINE_PATH = fileURLToPath(new URL('track.json', MUSIC_DIR))
-const ICONS_PATH = fileURLToPath(ICONS_URL)
+/** The mp3 this card plays. Nothing plays until `OMASEEK_MUSIC_PATH` names one. */
+function trackPath() {
+  return envPath('OMASEEK_MUSIC_PATH', 'kevin_koontz-we_can_fix_everything.mp3')
+}
+
+/** Optional album art; the card draws its own placeholder without it. */
+function artPath() {
+  return envPath('OMASEEK_MUSIC_ART', 'kevin_koontz-we_can_fix_everything.webp')
+}
+
+/** Optional analysed spectrum, so the meter moves while the sound is paused. */
+function timelinePath() {
+  return envPath('OMASEEK_MUSIC_TIMELINE', 'track.json')
+}
 
 /** Max bytes one `music.chunk` request may ask for. */
 const CHUNK_MAX = 1 << 20
@@ -81,24 +100,30 @@ function registerMetaRoute(ctx) {
       return { title: TRACK.title, artist: TRACK.artist, size: 0, art: '', timeline: null, icons: null }
     }
     if (heavy === null) {
-      const artBytes = await readBytes(ctx, ART_PATH, undefined, 1 << 20)
-      const timeline = JSON.parse(await readText(ctx, TIMELINE_PATH))
-      // The transport glyphs travel with the meta. If the file went missing,
-      // the browser half keeps its inlined copy of the same cells.
-      let icons = null
+      // Art and timeline belong to the shipped track, not to whatever file the
+      // environment points at, so both are optional: a track of your own plays
+      // without either, and the card falls back to the live analyser.
+      let art = ''
       try {
-        icons = JSON.parse(await readText(ctx, ICONS_PATH))
+        const artBytes = await readBytes(ctx, artPath(), undefined, 1 << 20)
+        art = 'data:image/webp;base64,' + Buffer.from(artBytes).toString('base64')
       } catch (missing) {
-        console.error('omaseek: transport icons not found, using inlined cells')
+        // No art: the card's ring pulses over an empty plate.
+      }
+      let timeline = null
+      try {
+        timeline = JSON.parse(await readText(ctx, timelinePath()))
+      } catch (missing) {
+        // No analysis: the meter reads the live audio instead of the timeline.
       }
       heavy = {
         title: TRACK.title,
         artist: TRACK.artist,
-        art: 'data:image/webp;base64,' + Buffer.from(artBytes).toString('base64'),
+        art: art,
         timeline: timeline,
-        icons: icons,
+        icons: null,
       }
-      console.log('omaseek: serving "' + TRACK.title + '"')
+      console.log('omaseek: serving "' + TRACK.title + '" from ' + path)
     }
     return Object.assign({}, heavy, { size: size })
   }

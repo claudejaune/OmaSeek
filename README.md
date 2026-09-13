@@ -9,7 +9,7 @@ Three features, one install:
   scheme-aware picker in **Settings → OmaSeek** and the Omarchy corner radii.
 - **OmaPixel** — the New Session hero's headline typewriter and the omarchy.org pixel field
   behind it. **Settings → OmaPixel**: field Off/Ambient/Interactive, headline Loop/Once.
-- **OmaMusic** — the site's now-playing card over the harness's own audio. **Settings →
+- **OmaMusic** — the site's now-playing card, over a track you point it at. **Settings →
   OmaMusic**.
 
 `themes.md` in this repo is the research behind the palettes — every color of every theme,
@@ -132,13 +132,27 @@ behaviour — one random phrase per load, typed once, then still.
 
 ### OmaMusic
 
-The site's now-playing card, driven by the harness's own audio rather than a stream: the Node
-half reads a local music file and serves it in chunks, and the browser half plays it through
-an `Audio` element and paints the spectrum the card animates.
+The site's now-playing card, driven by a local file rather than a stream: the Node half reads
+it in chunks and the browser half plays it through an `Audio` element, painting the spectrum
+the card animates.
 
-The file it plays is `OMASEEK_MUSIC_PATH` if set, and otherwise the track shipped in
-`assets/music/`. A host with no audio file at that path stays silent — the card reports that
-rather than throwing.
+**It ships no music** — the track omarchy.org plays is
+[Kevin Koontz's](https://x.com/koozeex1), and it is not ours to ship. Point the plugin at a
+file of your own instead:
+
+```sh
+OMASEEK_MUSIC_PATH=/home/you/Music/track.mp3          # what plays (required for sound)
+OMASEEK_MUSIC_ART=/home/you/Music/track.webp          # optional: album art
+OMASEEK_MUSIC_TIMELINE=/home/you/Music/track.json     # optional: analysed spectrum
+```
+
+The two extras belong to the track they were made for, so both are optional: without art the
+card draws its own plate, and without a timeline the meter follows the live audio and the
+duration comes off the file itself. With nothing set at all the card stays silent and says
+so, rather than throwing.
+
+`assets/` in this checkout keeps the site's own copies for development, untracked — see
+`.gitignore` for why they are not in the repository.
 
 ## Building
 
@@ -253,6 +267,13 @@ steering) message only — `MessageItem.tsx`'s `UserStyleBubble` documents itsel
 **The shell does not persist a picked theme; the picker does.** `setTheme()` only writes the
 built-in `light`/`dark`/`system` preference to settings. OmaSeek therefore remembers its own
 choice per scheme in `localStorage` (`omaseek.themes`) and re-applies it on load.
+
+## Credits
+
+OmaSeek is MIT. It ports omarchy.org's front end — the hero pixel field, the headline
+rotation, the music card — and collects Omarchy's 22 theme palettes, which is David
+Heinemeier Hansson's work, MIT licensed. [CREDITS.md](CREDITS.md) lists what came from where.
+The track omarchy.org plays is not included: OmaMusic plays a file of your own.
 
 ## Sources
 
