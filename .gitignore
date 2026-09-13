@@ -6,25 +6,19 @@ Thumbs.db
 .idea/
 .vscode/
 
-# Node (for any future tooling around the plugin sources)
+# Node
 node_modules/
 dist/
 *.log
 npm-debug.log*
 pnpm-debug.log*
 
-# Todo and refs
+# Local notes, and the reference checkouts the ports were read from
 TODO.md
-handoff*.md
-HANDOFF*.md
 references/
 
 # Packed tarballs from a release check
 *.tgz
-# The dynamic-package copies of the same features: kept in the working tree for
-# the in-session dev loop, never published. src/ is the supported copy.
-plugins/
 
-# The site's track and artwork: Kevin Koontz's recording, not ours to ship.
-# Kept locally for development; point OMASEEK_MUSIC_PATH at a track of your own.
+# A local copy of the track, for development. The plugin streams the real one.
 assets/
