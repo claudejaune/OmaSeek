@@ -16,12 +16,15 @@ Two things live here:
 |---|---|
 | Research (`themes.md`) | Complete — 22 themes, canonical + Omarchy-retuned values, DSH token mapping |
 | Plugin: single Tokyo Night toggle | Superseded by the full picker |
-| Plugin: full 22-theme picker | Implemented — `plugins/omaseek.host.js` + `plugins/omaseek.client.js` |
-| Plugin: hero pixel field | Implemented — the site's field behind the New Session hero, switched in Settings → OmaSeek |
+| Plugin: OmaSeek (themes + corners) | Implemented — `plugins/omaseek.host.js` + `plugins/omaseek.client.js` |
+| Plugin: OmaPixel (New Session hero) | Implemented — `plugins/omapixel.client.js`, no Host half, switched in Settings → OmaPixel |
+| Plugin: OmaMusic (floating player) | Implemented — `plugins/omamusic.host.js` + `plugins/omamusic.client.js` |
 
-## The plugin
+## The plugins
 
-Two halves, applied as one dynamic Cordis Package:
+Three independent dynamic Cordis Plugins, each re-defined and re-run on its own while the
+others keep running — OmaMusic untouched, OmaSeek for palettes and corners, OmaPixel for
+the New Session hero. **OmaSeek** itself is two halves applied as one Package:
 
 - **`plugins/omaseek.host.js`** — reads `themes.md` through the `fs` Service, parses the
   palette tables (§2, §4.1, §5.2, §7.2) and serves all 22 themes to the Client half over
@@ -43,7 +46,14 @@ Light / Dark / System chips switch the scheme — and with it, which set you can
 The token pairs in `Theme.listTokens` are *not* this mechanism: a pair is one active
 theme's own light and dark values, not two themes.
 
-### The hero pixel field
+### OmaPixel — the hero pixel field
+
+**`plugins/omapixel.client.js`** is the whole Plugin: hero phrase typewriter and the
+field below, with no Host half at all — pure DOM and canvas, so it activates almost the
+moment it is approved. The only seam to OmaSeek is the page itself: the field reads the
+`--dsw-alias-*` tokens off `body` when it mounts and remounts on `theme/change`, so it
+follows whichever OmaSeek palette is in force, and paints with the shipped theme (or its
+own fallback inks) when OmaSeek is absent.
 
 The New Session hero sits in the omarchy.org hero's field: a lattice of square cells whose
 resting luminance comes from a drifting value-noise blob, dithered down to those cells with
@@ -74,7 +84,7 @@ headline to three below the input card. The radial ramp keeps the middle clear o
 the same way the site keeps them off its wordmark, so the field reads as a frame around the
 hero copy.
 
-**Switching it.** Settings → OmaSeek has a **Pixel field** row: `Off` runs nothing, `Ambient`
+**Switching it.** Settings → OmaPixel has a **Pixel field** row: `Off` runs nothing, `Ambient`
 is the drifting lattice alone, and `Interactive` adds the cursor glow and the press stamp. It is not
 persisted, like every other OmaSeek preference — dynamic Packages do not survive the process.
 
