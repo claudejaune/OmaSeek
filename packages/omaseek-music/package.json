@@ -1,6 +1,6 @@
 {
   "name": "omaseek-music",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Omarchy's now-playing card for DeepSeek Harness, over a track you point it at",
   "type": "module",
   "license": "MIT",
