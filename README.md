@@ -48,12 +48,18 @@ theme's own light and dark values, not two themes.
 
 ### OmaPixel — the hero pixel field
 
-**`plugins/omapixel.client.js`** is the whole Plugin: hero phrase typewriter and the
+**`plugins/omapixel.client.js`** is the whole Plugin: the headline typewriter and the
 field below, with no Host half at all — pure DOM and canvas, so it activates almost the
 moment it is approved. The only seam to OmaSeek is the page itself: the field reads the
 `--dsw-alias-*` tokens off `body` when it mounts and remounts on `theme/change`, so it
 follows whichever OmaSeek palette is in force, and paints with the shipped theme (or its
 own fallback inks) when OmaSeek is absent.
+
+**The headline.** The site's `TypewriterTail` rhythm, ported: type a phrase, hold
+2.1 s, delete back to the front the current phrase and the next share — "We can fix
+every" — and type on, forever, with the site's per-key jitter, word pauses, and
+occasional hesitate. The typewriter owns the shipped title span's `textContent` while it
+runs and puts the product's own text back on stop.
 
 The New Session hero sits in the omarchy.org hero's field: a lattice of square cells whose
 resting luminance comes from a drifting value-noise blob, dithered down to those cells with
@@ -84,9 +90,11 @@ headline to three below the input card. The radial ramp keeps the middle clear o
 the same way the site keeps them off its wordmark, so the field reads as a frame around the
 hero copy.
 
-**Switching it.** Settings → OmaPixel has a **Pixel field** row: `Off` runs nothing, `Ambient`
-is the drifting lattice alone, and `Interactive` adds the cursor glow and the press stamp. It is not
-persisted, like every other OmaSeek preference — dynamic Packages do not survive the process.
+**Switching it.** Settings → OmaPixel has two rows. **Pixel field**: `Off` runs nothing, `Ambient`
+is the drifting lattice alone, and `Interactive` adds the cursor glow and the press
+stamp. **Headline**: `Loop` is the site's rotation above, and `Once` is the earlier
+behaviour — one random phrase per load, typed once, then still. Nothing is persisted,
+like every other OmaSeek preference — dynamic Packages do not survive the process.
 
 ### Verifying
 

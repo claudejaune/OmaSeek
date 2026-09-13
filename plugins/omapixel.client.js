@@ -1,11 +1,13 @@
 /**
  * OmaPixel — the New Session hero's fancy pixels for DeepSeek Harness.
  *
- * The New Session hero swaps its headline for one of the four OmaSeek
- * phrases, typed letter by letter once per hero mount, and sits in the
- * omarchy.org hero's pixel field: a dithered lattice that drifts behind the
- * composer column, lights under the cursor, and takes a press by stamping
- * the Omarchy mark out of the click point.
+ * The New Session hero's headline runs the site's rotation: type a phrase,
+ * hold, delete back to the "We can fix every" front the phrases share, type
+ * on to the next (the `once` mode types one random phrase per load and
+ * stops). And the hero sits in the omarchy.org hero's pixel field: a
+ * dithered lattice that drifts behind the composer column, lights under the
+ * cursor, and takes a press by stamping the Omarchy mark out of the click
+ * point.
  *
  * This Package has no Host half — pure DOM and canvas, so it activates
  * almost the moment it is approved. It reads the theme now in force straight
@@ -53,6 +55,18 @@ var FIELD_MODES = ['off', 'ambient', 'interactive']
 var FIELD_LABELS = { off: 'Off', ambient: 'Ambient', interactive: 'Interactive' }
 
 /**
+ * How the headline types. `loop` is the site's rotation: type a phrase, hold,
+ * delete back to the front the phrases share — "We can fix every" — and type
+ * on to the next, forever. `once` is the one-shot sheet: a random phrase,
+ * typed once per run, then still.
+ */
+var TYPE_MODES = ['loop', 'once']
+var TYPE_LABELS = { loop: 'Loop', once: 'Once' }
+
+/** The shipped headline span; the sibling badge is told apart by its class. */
+var TITLE_SELECTOR = '[class*="titleGroup"] > span:not([class*="previewBadge"])'
+
+/**
  * The New Session hero's headline, replaced per Plugin load.
  *
  * The shipped headline is a plain `t('hero.headline')` span with no Slot of
@@ -81,8 +95,7 @@ function heroSheet(phrase) {
   var len = phrase.length
   var ms = Math.round(len * 88)
   var start = 350
-  // The shipped title span; the sibling badge is told apart by its class.
-  var title = '[class*="titleGroup"] > span:not([class*="previewBadge"])'
+  var title = TITLE_SELECTOR
   return [
     title + '{position:relative;font-size:0}',
     title + '::after{content:"' + phrase + '";display:inline-block;font-size:26px;line-height:32px;',
@@ -634,6 +647,124 @@ function mountField(host, live) {
   }
 }
 
+/* ── The headline typewriter ──────────────────────────────────────────
+ *
+ * The site's `TypewriterTail` ports whole: the same rhythm, the same shared
+ * front, the same height reservation. The one translation is where the
+ * prefix lives. The site renders a static "We can fix every" and types only
+ * the tail, so deleting can stop at zero; here every phrase is complete, and
+ * `shared` stops the deletion at the front the current phrase and the next
+ * share — which, for the four OmaSeek phrases, is exactly "We can fix every".
+ * ───────────────────────────────────────────────────────────────────── */
+
+/** Base milliseconds per keystroke, plus up to this much again at random. */
+var KEY_MS = 58
+var KEY_JITTER = 60
+var WORD_PAUSE = 95
+var ENDING_PAUSE = 70
+/** How often a keystroke catches, and for how long. */
+var HESITATE_ODDS = 0.07
+var HESITATE_MS = 140
+var DELETE_MS = 27
+var HOLD_MS = 2100
+var TURN_MS = 420
+
+/**
+ * Run the rotation on one headline span.
+ * @param el - the shipped title span itself; its text is owned while running.
+ * @param phrases - whole phrases, typed in rotation from a random one.
+ * @param reduced - show one phrase instead of animating.
+ * @returns disposer putting the product's own text back.
+ */
+function mountTyper(el, phrases, reduced) {
+  var block = el.parentElement
+  var own = el.textContent
+  var height = block !== null ? block.style.minHeight : ''
+  var still = reduced || phrases.length < 2
+
+  function restore() {
+    el.textContent = own
+    if (block !== null) block.style.minHeight = height
+    el.removeAttribute('data-omap-typing')
+  }
+
+  if (still) {
+    el.textContent = phrases[Math.floor(Math.random() * phrases.length)]
+    return restore
+  }
+
+  /** Holds the block at its tallest phrase, so no phrase can resize it. */
+  function reserve() {
+    if (block === null) return
+    var before = el.textContent
+    block.style.minHeight = ''
+    var tallest = 0
+    for (var i = 0; i < phrases.length; i += 1) {
+      el.textContent = phrases[i]
+      var h = block.getBoundingClientRect().height
+      if (h > tallest) tallest = h
+    }
+    el.textContent = before
+    block.style.minHeight = Math.ceil(tallest) + 'px'
+  }
+
+  /** How much of the front of these two the reader would not see change. */
+  function shared(a, b) {
+    var i = 0
+    while (i < a.length && i < b.length && a.charAt(i) === b.charAt(i)) i += 1
+    return i
+  }
+
+  var index = Math.floor(Math.random() * phrases.length)
+  var length = 0
+  var deleting = false
+  var timer = 0
+
+  function wait() {
+    var phrase = phrases[index]
+    if (deleting) return DELETE_MS
+    var ms = KEY_MS + Math.random() * KEY_JITTER
+    if (phrase.charAt(length - 1) === ' ') ms += WORD_PAUSE
+    if (length >= phrase.length - 2) ms += ENDING_PAUSE
+    if (Math.random() < HESITATE_ODDS) ms += HESITATE_MS
+    return ms
+  }
+
+  function step() {
+    var phrase = phrases[index]
+    el.textContent = phrase.slice(0, length)
+
+    var next = wait()
+    var onward = (index + 1) % phrases.length
+    if (!deleting && length === phrase.length) {
+      deleting = true
+      next = HOLD_MS
+    } else if (deleting && length === shared(phrase, phrases[onward])) {
+      deleting = false
+      index = onward
+      next = TURN_MS
+    } else {
+      length += deleting ? -1 : 1
+    }
+
+    // The caret blinks only at the ends, never mid-word, as on the site.
+    el.setAttribute('data-omap-typing', next > HOLD_MS - 1 || next === TURN_MS ? '0' : '1')
+    timer = window.setTimeout(step, next)
+  }
+
+  // Measure against the real webfont, or the reservation is a fallback's.
+  reserve()
+  if (document.fonts !== undefined && document.fonts.ready !== undefined) {
+    document.fonts.ready.then(function () { reserve() })
+  }
+  step()
+
+  return function () {
+    window.clearTimeout(timer)
+    restore()
+  }
+}
+
 var CSS = [
   // The host has to hold a stacking context for its own `z-index:-1` child:
   // without one, the negative cell paints against an ancestor's context and
@@ -650,6 +781,14 @@ var CSS = [
   '.omapixel-chip:hover{background:var(--dsw-alias-bg-layer-2)}',
   '.omapixel-chip[data-on="1"]{background:var(--dsw-alias-brand-primary);color:var(--dsw-alias-bg-base);border-color:transparent}',
   '.omapixel-legend{font-size:12px;font-weight:600;color:var(--dsw-alias-label-primary)}',
+  // The loop mode's caret: an inline block that walks with the typed text,
+  // solid while typing and blinking only at a phrase's end. The attribute is
+  // set by the typewriter alone, so the sheet and the once mode ignore it.
+  '[data-omap-typing]::after{content:"";display:inline-block;width:3px;height:1.05em;',
+  'margin-left:2px;vertical-align:text-bottom;background:var(--dsw-alias-brand-primary)}',
+  '@media (prefers-reduced-motion: no-preference){',
+  '[data-omap-typing="0"]::after{animation:omap-caret 1.06s step-end infinite}}',
+  '@keyframes omap-caret{0%,50%{opacity:1}50.01%,100%{opacity:0}}',
 ].join('\n')
 
 /** createElement shorthand — this Package is not compiled, so no JSX. */
@@ -666,7 +805,7 @@ return {
 
     // Transient like every OmaSeek preference: dynamic Packages do not
     // survive the process, so nothing here outlives the run.
-    var state = { field: 'interactive' }
+    var state = { field: 'interactive', typing: 'loop' }
     var subs = []
     function notify() {
       for (var i = 0; i < subs.length; i += 1) subs[i]()
@@ -710,6 +849,47 @@ return {
       notify()
     }
 
+    // The headline: `loop` is the site's rotation on the shipped span, and
+    // `once` is the one-shot sheet — a random phrase per run, typed once.
+    var reducedMotion = false
+    if (typeof window !== 'undefined' && window.matchMedia !== undefined) {
+      reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    }
+    var runPhrase = HERO_PHRASES[Math.floor(Math.random() * HERO_PHRASES.length)]
+
+    var sheetOff = null
+    var typerOff = null
+    var typerEl = null
+
+    /** Put in or take out the one-shot sheet the `once` mode paints with. */
+    function syncSheet() {
+      var want = state.typing === 'once'
+      if (want === (sheetOff !== null)) return
+      if (sheetOff !== null) { sheetOff(); sheetOff = null }
+      if (want) sheetOff = styles.insert(heroSheet(runPhrase))
+    }
+
+    /** Run or stop the rotation on the headline now showing, if any. */
+    function syncTyper() {
+      var el = null
+      if (state.typing === 'loop' && typeof document !== 'undefined') {
+        var root = document.querySelector('[data-phase="hero"]')
+        if (root !== null) el = root.querySelector(TITLE_SELECTOR)
+      }
+      if (el === typerEl && typerOff !== null) return
+      if (typerOff !== null) { typerOff(); typerOff = null; typerEl = null }
+      if (el === null) return
+      typerEl = el
+      typerOff = mountTyper(el, HERO_PHRASES, reducedMotion)
+    }
+
+    function setTypingMode(mode) {
+      state.typing = mode
+      syncSheet()
+      syncTyper()
+      notify()
+    }
+
     ctx.effect(function () {
       if (typeof document === 'undefined') return function () {}
       // The hero comes and goes with the route and with the first message,
@@ -719,8 +899,8 @@ return {
       function check() {
         if (queued) return
         queued = true
-        if (typeof requestAnimationFrame !== 'function') { queued = false; syncField(); return }
-        requestAnimationFrame(function () { queued = false; syncField() })
+        if (typeof requestAnimationFrame !== 'function') { queued = false; syncField(); syncTyper(); return }
+        requestAnimationFrame(function () { queued = false; syncField(); syncTyper() })
       }
       var watcher = null
       if (typeof MutationObserver !== 'undefined') {
@@ -743,16 +923,18 @@ return {
     ctx.effect(function () {
       return function () {
         if (fieldOff !== null) { fieldOff(); fieldOff = null; fieldHost = null }
+        if (typerOff !== null) { typerOff(); typerOff = null; typerEl = null }
+        if (sheetOff !== null) { sheetOff(); sheetOff = null }
       }
-    }, 'omapixel: field teardown')
+    }, 'omapixel: teardown')
 
     ctx.effect(function () { return styles.insert(CSS) }, 'omapixel: styles')
     ctx.effect(function () {
-      // One phrase per run, picked when the Plugin loads; the typing itself is
-      // per hero mount, because the CSS animation restarts with the element.
-      var phrase = HERO_PHRASES[Math.floor(Math.random() * HERO_PHRASES.length)]
-      return styles.insert(heroSheet(phrase))
-    }, 'omapixel: hero headline')
+      // Both headline modes start with whatever hero is up, and the observer
+      // above re-runs them as heroes come and go.
+      syncSheet()
+      syncTyper()
+    }, 'omapixel: headline')
 
     function HeroPage() {
       var tick = React.useState(0)
@@ -776,10 +958,23 @@ return {
               onClick: function () { setFieldMode(mode) },
             }, FIELD_LABELS[mode])
           })),
+        h('div', { className: 'omapixel-row' },
+          h('span', { className: 'omapixel-legend' }, 'Headline'),
+          TYPE_MODES.map(function (mode) {
+            return h('button', {
+              key: mode,
+              className: 'omapixel-chip',
+              type: 'button',
+              'data-on': state.typing === mode ? '1' : '0',
+              onClick: function () { setTypingMode(mode) },
+            }, TYPE_LABELS[mode])
+          })),
         h('div', { className: 'omapixel-note' },
           'Off runs nothing, Ambient is the drifting lattice alone, and Interactive adds'
           + ' the cursor glow and the press stamp. The field takes its inks from the theme'
-          + ' now in force.'))
+          + ' now in force. Loop keeps the site\'s rotation — type a phrase, hold, delete'
+          + ' back to "We can fix every", type on — and Once types one random phrase per'
+          + ' load and stops.'))
     }
 
     ctx.effect(function () {
