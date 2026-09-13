@@ -1,0 +1,6 @@
+# The OmaSeek row on its own: install this package directly to run the themes
+# and the picker without the other two. The `omaseek` meta package installs all
+# three instead — add one or the other, not both.
+- insert:
+    - id: omaseek-themes
+      name: omaseek-themes

@@ -1,0 +1,4 @@
+# The OmaPixel row on its own: the hero headline rotation and the pixel field.
+- insert:
+    - id: omaseek-pixel
+      name: omaseek-pixel

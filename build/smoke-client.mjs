@@ -1,30 +1,30 @@
 #!/usr/bin/env node
 /**
- * Execute the built browser half the way the page will, under stubs.
+ * Execute each built browser half the way the page will, under stubs.
  *
- * `node --check` only proves the bundle parses, and the server-side checks only
- * prove it is *served*. Neither runs a module body, so neither can see a name
- * that was never bound — an import rewritten into a nested block, say. This
- * evaluates the bundle, hands `apply` a fake Cordis context whose services and
- * slots answer, renders every component the features registered, and then runs
- * every disposer they returned. It runs on every `pnpm check`.
+ * `node --check` only proves a bundle parses, and a server-side check only
+ * proves it is *served*. Neither runs a module body, so neither can see a name
+ * that was never bound — an import rewritten into a nested block, say. For each
+ * package this evaluates the bundle, hands `apply` a fake Cordis context whose
+ * services and slots answer, renders every component the feature registered,
+ * and then runs every disposer it returned. It runs on every `pnpm check`.
  *
- * Three hosts are exercised, because the failure paths are where this package
- * has actually broken: a healthy one, one with no music file (the meta route
- * answers `timeline: null`), and one whose route rejects outright. Each must
- * apply, render and tear down without throwing.
+ * Every package is checked, and each is checked *alone*: a feature that only
+ * worked because a sibling happened to be loaded is the exact failure the split
+ * could introduce, so nothing here ever mounts two of them together.
  *
- * It is not a browser, and the stub React is not React: hooks have no order,
- * no re-render and no dependency comparison, so a hook-rule violation or an
- * update-path bug passes here. What it does cover is module-graph binding,
- * apply surviving the services it asks for, first-render crashes on every host
+ * It is not a browser, and the stub React is not React: hooks have no order, no
+ * re-render and no dependency comparison, so a hook-rule violation or an
+ * update-path bug passes here. What it does cover is module-graph binding, apply
+ * surviving the services it asks for, first-render crashes on every payload
  * shape, and teardown that throws.
  */
 import { readFile } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)))
+const REPO = resolve(fileURLToPath(new URL('..', import.meta.url)))
 
 // A throw inside a promise's fulfillment handler never reaches the caller and
 // never appears in a `problems` list — the missing-track bug was exactly that
@@ -94,12 +94,13 @@ const React = {
   Fragment: Symbol('Fragment'),
 }
 
+/** Backing store for the localStorage stub; reset per case. */
+const store = new Map()
+
 // The loader facade lives on `window`, and module bodies reach the rest of the
 // page through that same object — so the stubs and the facade are one value,
 // and `window` inside the bundle is that value rather than a bare object.
 let loaded = null
-/** Backing store for the localStorage stub; reset per scenario. */
-const store = new Map()
 const windowStub = {
   __ModuleLoader__: { load(definition) { loaded = definition } },
   document: documentStub,
@@ -114,12 +115,12 @@ const windowStub = {
   removeEventListener: () => {},
   getComputedStyle: () => ({ getPropertyValue: () => '', color: 'rgb(0, 0, 0)' }),
   location: { href: 'http://127.0.0.1:3113/', search: '' },
+  navigator: { userAgent: 'smoke' },
   localStorage: {
     getItem: (key) => (store.has(key) ? store.get(key) : null),
     setItem: (key, value) => { store.set(key, String(value)) },
     removeItem: (key) => { store.delete(key) },
   },
-  navigator: { userAgent: 'smoke' },
 }
 
 globalThis.window = windowStub
@@ -153,76 +154,49 @@ const THEMES = {
 
 const TIMELINE = { duration: 210, fps: 30, bands: 48, spectrum: Buffer.from([1, 2, 3]).toString('base64') }
 
-const HOSTS = [
+const WITH_TRACK = { title: 'T', artist: 'A', size: 4096, art: '', timeline: TIMELINE, icons: null }
+const NO_TRACK = { title: 'T', artist: 'A', size: 0, art: '', timeline: null, icons: null }
+const NO_TIMELINE = { title: 'T', artist: 'A', size: 4096, art: '', timeline: null, icons: null }
+
+/* ── the three packages, and what each must do alone ───────────────────── */
+
+const PACKAGES = [
   {
-    label: 'healthy host',
-    themes: THEMES,
-    meta: { title: 'T', artist: 'A', size: 4096, art: '', timeline: TIMELINE, icons: null },
-    expectThemes: 4,
-    scheme: 'dark',
-    // Nobody has chosen: the dark UI opens on Catppuccin.
-    expectApplied: 'omarchy-catppuccin',
+    dir: 'packages/omaseek-themes',
+    id: 'omaseek-themes',
+    label: 'OmaSeek (themes)',
+    expect: { sections: ['settings.section'], overlays: 0 },
+    cases: [
+      { label: 'dark scheme, nothing chosen', scheme: 'dark', applied: 'omarchy-catppuccin', themes: 4 },
+      { label: 'light scheme, nothing chosen', scheme: 'light', applied: 'omarchy-catppuccin-latte', themes: 4 },
+      { label: 'a remembered choice', scheme: 'dark', stored: { dark: 'omarchy-tokyo-night' }, applied: 'omarchy-tokyo-night', themes: 4 },
+      { label: 'a remembered opt-out', scheme: 'dark', stored: { dark: 'base' }, applied: null, themes: 4 },
+    ],
   },
   {
-    label: 'host with no music file',
-    themes: THEMES,
-    meta: { title: 'T', artist: 'A', size: 0, art: '', timeline: null, icons: null },
-    expectThemes: 4,
-    scheme: 'dark',
-    expectApplied: 'omarchy-catppuccin',
+    dir: 'packages/omaseek-pixel',
+    id: 'omaseek-pixel',
+    label: 'OmaPixel (hero)',
+    expect: { sections: ['settings.section'], overlays: 0, themes: 0 },
+    cases: [{ label: 'the hero section', scheme: 'dark' }],
   },
   {
-    label: 'host whose music route fails',
-    themes: THEMES,
-    meta: null,
-    expectThemes: 4,
-    scheme: 'dark',
-    expectApplied: 'omarchy-catppuccin',
-  },
-  {
-    label: 'light scheme',
-    themes: THEMES,
-    meta: { title: 'T', artist: 'A', size: 0, art: '', timeline: null, icons: null },
-    expectThemes: 4,
-    scheme: 'light',
-    // …and a light one on Catppuccin Latte.
-    expectApplied: 'omarchy-catppuccin-latte',
-  },
-  {
-    label: 'remembered choice',
-    themes: THEMES,
-    meta: { title: 'T', artist: 'A', size: 0, art: '', timeline: null, icons: null },
-    expectThemes: 4,
-    scheme: 'dark',
-    stored: { dark: 'omarchy-tokyo-night' },
-    // The stored palette wins over the automatic one.
-    expectApplied: 'omarchy-tokyo-night',
-  },
-  {
-    label: 'own track with no timeline',
-    themes: THEMES,
-    // A file of your own with no analysed spectrum beside it: playable, and the
-    // card must not treat the missing timeline as a missing track.
-    meta: { title: 'T', artist: 'A', size: 4096, art: '', timeline: null, icons: null },
-    expectThemes: 4,
-    scheme: 'dark',
-    expectApplied: 'omarchy-catppuccin',
-  },
-  {
-    label: 'remembered opt-out',
-    themes: THEMES,
-    meta: { title: 'T', artist: 'A', size: 0, art: '', timeline: null, icons: null },
-    expectThemes: 4,
-    scheme: 'dark',
-    stored: { dark: 'base' },
-    // `base` means the harness palette: nothing is applied at all.
-    expectApplied: null,
+    dir: 'packages/omaseek-music',
+    id: 'omaseek-music',
+    label: 'OmaMusic (card)',
+    expect: { sections: [], overlays: 1, themes: 0 },
+    cases: [
+      { label: 'a track with a timeline', meta: WITH_TRACK },
+      { label: 'no track', meta: NO_TRACK },
+      { label: 'a track of your own, no timeline', meta: NO_TIMELINE },
+      { label: 'a route that fails', meta: null },
+    ],
   },
 ]
 
 /* ── one page load ─────────────────────────────────────────────────────── */
 
-/** Every service the features read, plus a log of what they did with them. */
+/** Every service a feature reads, plus a log of what it did with them. */
 function makeServices() {
   const calls = { registered: [], sections: [], overlays: [], themeRegistrations: [], disposers: [], themeSet: [] }
 
@@ -281,80 +255,6 @@ function jsonResponse(value) {
   return { ok: true, status: 200, async json() { return value } }
 }
 
-/** Load the bundle once — each factory call is a fresh module graph. */
-const source = await readFile(resolve(ROOT, 'lib/client.js'), 'utf8')
-new Function('window', source)(windowStub)
-if (loaded === null) throw new Error('omaseek: bundle never called window.__ModuleLoader__.load')
-if (loaded.id !== 'omaseek') throw new Error(`omaseek: bundle registered as "${loaded.id}"`)
-
-async function runHost(host) {
-  const { calls, ctx } = makeServices()
-  calls.scheme = host.scheme
-  store.clear()
-  for (const [scheme, id] of Object.entries(host.stored === undefined ? {} : host.stored)) {
-    store.set('omaseek.themes', JSON.stringify({ [scheme]: id }))
-  }
-
-  globalThis.fetch = async (path) => {
-    if (path === '/api/omaseek.themes') return jsonResponse(host.themes)
-    if (path === '/api/omaseek.music.meta') {
-      if (host.meta === null) return { ok: false, status: 500, async json() { return { error: 'nope' } } }
-      return jsonResponse(host.meta)
-    }
-    return { ok: false, status: 404, async json() { return {} } }
-  }
-
-  const externals = { react: React }
-  const moduleExports = loaded.factory((id) => {
-    if (id in externals) return externals[id]
-    throw new Error(`omaseek: bundle asked the page for "${id}", which is not a client baseline module`)
-  })
-  if (typeof moduleExports.apply !== 'function') throw new Error('omaseek: bundle exports no apply()')
-
-  const problems = []
-  try {
-    moduleExports.apply(ctx)
-  } catch (error) {
-    return { problems: [`apply() threw: ${error.message}`], calls }
-  }
-
-  // The theme table arrives over the fetch bridge, so the registrations land a
-  // microtask later — wait for them instead of racing the assertions below.
-  await new Promise((done) => setTimeout(done, 20))
-
-  if (calls.themeRegistrations.length !== host.expectThemes) {
-    problems.push(`registered ${calls.themeRegistrations.length} themes, expected ${host.expectThemes}`)
-  }
-  if (!calls.sections.includes('settings.section')) problems.push('no settings.section registration')
-  if (!calls.sections.includes('shell.overlay')) problems.push('no shell.overlay registration')
-  if (calls.overlays.length !== 1) problems.push(`registered ${calls.overlays.length} overlay cards, expected 1`)
-  if (calls.disposers.length === 0) problems.push('no owned effects were registered')
-
-  // Which palette the picker put in force for this scheme.
-  const applied = calls.themeSet.filter((id) => id.startsWith('omarchy-'))
-  const wanted = host.expectApplied === undefined ? null : host.expectApplied
-  if (wanted === null) {
-    if (applied.length > 0) problems.push(`applied ${applied.join(', ')} where none was expected`)
-  } else if (!applied.includes(wanted)) {
-    problems.push(`applied ${applied.length === 0 ? 'nothing' : applied.join(', ')}; expected ${wanted}`)
-  }
-
-  const rendered = renderAll(calls, problems)
-
-  // Teardown: every disposer the features handed over must run clean, because a
-  // throwing cleanup takes the plugin's unload with it.
-  let torn = 0
-  for (const dispose of [...calls.disposers].reverse()) {
-    try {
-      dispose()
-      torn += 1
-    } catch (error) {
-      problems.push(`a disposer threw on teardown: ${error.message}`)
-    }
-  }
-  return { problems, calls, rendered, torn }
-}
-
 /** Render every registered component, children and all. */
 function renderAll(calls, problems) {
   const rendered = []
@@ -390,24 +290,118 @@ function renderAll(calls, problems) {
   return rendered
 }
 
-/* ── run every host, then judge ────────────────────────────────────────── */
+async function runCase(pkg, testCase) {
+  const { calls, ctx } = makeServices()
+  calls.scheme = testCase.scheme === undefined ? 'dark' : testCase.scheme
+  store.clear()
+  for (const [scheme, id] of Object.entries(testCase.stored === undefined ? {} : testCase.stored)) {
+    store.set('omaseek.themes', JSON.stringify({ [scheme]: id }))
+  }
+
+  globalThis.fetch = async (path) => {
+    if (path === '/api/omaseek.themes') return jsonResponse(THEMES)
+    if (path === '/api/omaseek.music.meta') {
+      if (testCase.meta === null) return { ok: false, status: 500, async json() { return { error: 'nope' } } }
+      return jsonResponse(testCase.meta === undefined ? NO_TRACK : testCase.meta)
+    }
+    return { ok: false, status: 404, async json() { return {} } }
+  }
+
+  const problems = []
+  const externals = { react: React }
+  const moduleExports = loaded.factory((id) => {
+    if (id in externals) return externals[id]
+    throw new Error(`${pkg.id}: the bundle asked the page for "${id}", which is not a client baseline module`)
+  })
+  if (typeof moduleExports.apply !== 'function') return { problems: ['the bundle exports no apply()'] }
+
+  try {
+    moduleExports.apply(ctx)
+  } catch (error) {
+    return { problems: [`apply() threw: ${error.message}`] }
+  }
+
+  await new Promise((done) => setTimeout(done, 20))
+
+  const wanted = pkg.expect
+  const expectedThemes = testCase.themes === undefined ? wanted.themes : testCase.themes
+  if (expectedThemes !== undefined && calls.themeRegistrations.length !== expectedThemes) {
+    problems.push(`registered ${calls.themeRegistrations.length} themes, expected ${expectedThemes}`)
+  }
+  for (const slot of wanted.sections) {
+    if (!calls.sections.includes(slot)) problems.push(`no ${slot} registration`)
+  }
+  if (calls.overlays.length !== wanted.overlays) {
+    problems.push(`registered ${calls.overlays.length} overlay cards, expected ${wanted.overlays}`)
+  }
+  if (calls.disposers.length === 0) problems.push('no owned effects were registered')
+
+  if (testCase.applied !== undefined) {
+    const applied = calls.themeSet.filter((id) => id.startsWith('omarchy-'))
+    if (testCase.applied === null) {
+      if (applied.length > 0) problems.push(`applied ${applied.join(', ')} where none was expected`)
+    } else if (!applied.includes(testCase.applied)) {
+      problems.push(`applied ${applied.length === 0 ? 'nothing' : applied.join(', ')}; expected ${testCase.applied}`)
+    }
+  }
+
+  const rendered = renderAll(calls, problems)
+
+  // Teardown: every disposer the feature handed over must run clean, because a
+  // throwing cleanup takes the plugin's unload with it.
+  let torn = 0
+  for (const dispose of [...calls.disposers].reverse()) {
+    try {
+      dispose()
+      torn += 1
+    } catch (error) {
+      problems.push(`a disposer threw on teardown: ${error.message}`)
+    }
+  }
+  return { problems, calls, rendered, torn }
+}
+
+/* ── run every package alone, then judge ───────────────────────────────── */
 
 const failures = []
-for (const host of HOSTS) {
-  const result = await runHost(host)
-  if (result.problems.length > 0) failures.push({ host: host.label, problems: result.problems })
-  else {
-    console.log(`omaseek: ${host.label} ok — ${result.calls.themeRegistrations.length} themes, `
-      + `${result.calls.registered.length} registrations, ${result.rendered.length} components rendered, `
-      + `${result.torn} disposers run`)
+let checks = 0
+
+for (const pkg of PACKAGES) {
+  const bundlePath = resolve(REPO, pkg.dir, 'lib/client.js')
+  if (!existsSync(bundlePath)) {
+    failures.push({ label: pkg.label, problems: [`${pkg.dir}/lib/client.js is missing — run pnpm build`] })
+    continue
+  }
+  const source = await readFile(bundlePath, 'utf8')
+  loaded = null
+  new Function('window', source)(windowStub)
+  if (loaded === null) {
+    failures.push({ label: pkg.label, problems: ['the bundle never called window.__ModuleLoader__.load'] })
+    continue
+  }
+  if (loaded.id !== pkg.id) {
+    failures.push({ label: pkg.label, problems: [`the bundle registered as "${loaded.id}", expected "${pkg.id}"`] })
+    continue
+  }
+
+  for (const testCase of pkg.cases) {
+    checks += 1
+    const result = await runCase(pkg, testCase)
+    if (result.problems.length > 0) {
+      failures.push({ label: `${pkg.label} — ${testCase.label}`, problems: result.problems })
+    } else {
+      console.log(`omaseek: ${pkg.label}: ${testCase.label} ok — ${result.calls.registered.length} registrations, `
+        + `${result.rendered.length} components rendered, ${result.torn} disposers run`)
+    }
   }
 }
 
 if (failures.length > 0) {
   console.error('omaseek: browser half smoke test failed')
   for (const failure of failures) {
-    console.error(`  ${failure.host}:`)
+    console.error(`  ${failure.label}:`)
     for (const problem of failure.problems) console.error(`    - ${problem}`)
   }
   process.exit(1)
 }
+console.log(`omaseek: ${PACKAGES.length} packages, ${checks} cases, all green`)

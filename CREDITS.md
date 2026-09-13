@@ -14,7 +14,7 @@ work. Omarchy is MIT licensed; the text is in
 | the headline | `TypewriterTail.tsx` — the rotation rhythm |
 | the music card | `MusicControl.tsx` and `src/lib/music.ts` — the state machine, the meter, the card |
 | the play/pause glyphs | radio.omarchy.org's icon set |
-| the 22 theme palettes | the home page's themes, collected in [themes.md](themes.md) |
+| the 22 theme palettes | the home page's themes, collected in [themes.md](packages/omaseek-themes/themes.md) |
 
 ## The track
 

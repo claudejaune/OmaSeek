@@ -1,55 +1,19 @@
 {
-  "name": "omaseek",
-  "version": "0.1.0",
-  "description": "Omarchy home-page themes, hero pixel field, and music cards for DeepSeek Harness",
+  "name": "omaseek-workspace",
+  "private": true,
+  "description": "Omarchy's home page for DeepSeek Harness \u2014 three plugins, each installable on its own",
   "type": "module",
   "license": "MIT",
   "author": "claudejaune (https://github.com/claudejaune)",
   "homepage": "https://github.com/claudejaune/OmaSeek#readme",
-  "main": "./src/host.js",
-  "exports": {
-    ".": "./src/host.js",
-    "./client": "./lib/client.js",
-    "./package.json": "./package.json"
-  },
-  "files": [
-    "src",
-    "lib/client.js",
-    "cordis.patch.yml",
-    "themes.md",
-    "README.md",
-    "LICENSE",
-    "CREDITS.md",
-    "LICENSES"
-  ],
-  "scripts": {
-    "build": "node build/bundle-client.mjs",
-    "prepack": "node build/bundle-client.mjs",
-    "smoke": "node build/smoke-client.mjs",
-    "check": "node build/bundle-client.mjs && node build/smoke-client.mjs && node --check src/host.js"
-  },
-  "engines": {
-    "node": ">=20"
-  },
-  "keywords": [
-    "dsh-plugin",
-    "deepseek-harness",
-    "omarchy",
-    "theme"
-  ],
-  "publishConfig": {
-    "access": "public"
-  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/claudejaune/OmaSeek.git"
   },
-  "dsh": {
-    "bundle": {
-      "patch": "./cordis.patch.yml"
-    },
-    "client": {
-      "platform": "web"
-    }
+  "scripts": {
+    "build": "pnpm -r build",
+    "smoke": "node build/smoke-client.mjs",
+    "check": "pnpm build && pnpm smoke",
+    "publish:all": "pnpm -r publish --access public"
   }
 }

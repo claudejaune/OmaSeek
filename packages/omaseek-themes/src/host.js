@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url'
 import { readText } from './files.js'
 
 /** The research doc, located beside the package rather than at a fixed path. */
-const DOC_URL = new URL('../../themes.md', import.meta.url)
+const DOC_URL = new URL('../themes.md', import.meta.url)
 
 /** The same location as a host path, for the `fs` Service and the payload. */
 const DOC_PATH = fileURLToPath(DOC_URL)

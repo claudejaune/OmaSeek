@@ -25,7 +25,7 @@ import { fileURLToPath } from 'node:url'
 import { fileSize, readBytes, readText } from './files.js'
 
 /** The plugin's own files, shipped beside this module. */
-const MUSIC_DIR = new URL('../../assets/music/', import.meta.url)
+const MUSIC_DIR = new URL('../assets/music/', import.meta.url)
 
 /** The single track, exactly as omarchy.org ships it on its home page. */
 const TRACK = {

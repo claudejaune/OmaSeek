@@ -32,13 +32,16 @@ import { existsSync } from 'node:fs'
 import { dirname, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const SRC = resolve(ROOT, 'src')
+const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+
+/** Which package to bundle: the argument, or the working directory. */
+const TARGET = process.argv[2] === undefined ? process.cwd() : resolve(process.argv[2])
+const SRC = resolve(TARGET, 'src')
 const ENTRY = resolve(SRC, 'client.js')
-const OUT = resolve(ROOT, 'lib/client.js')
+const OUT = resolve(TARGET, 'lib/client.js')
 
 /** The id the page will know this bundle by: the package's own name. */
-const PACKAGE_ID = JSON.parse(await readFile(resolve(ROOT, 'package.json'), 'utf8')).name
+const PACKAGE_ID = JSON.parse(await readFile(resolve(TARGET, 'package.json'), 'utf8')).name
 
 /** Module-table entries the page seeds; everything else must be ours. */
 const BASELINE = new Set([

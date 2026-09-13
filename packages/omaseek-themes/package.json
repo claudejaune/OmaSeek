@@ -1,0 +1,24 @@
+{
+  "name": "omaseek-themes",
+  "version": "0.1.0",
+  "description": "Omarchy's 22 home-page themes for DeepSeek Harness, with the scheme-aware picker",
+  "type": "module",
+  "license": "MIT",
+  "author": "claudejaune (https://github.com/claudejaune)",
+  "repository": { "type": "git", "url": "git+https://github.com/claudejaune/OmaSeek.git" },
+  "main": "./src/host.js",
+  "exports": {
+    ".": "./src/host.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": ["src", "lib/client.js", "cordis.patch.yml", "themes.md"],
+  "scripts": {
+    "build": "node ../../build/bundle-client.mjs .",
+    "prepack": "node ../../build/bundle-client.mjs ."
+  },
+  "dsh": {
+    "bundle": { "patch": "./cordis.patch.yml" },
+    "client": { "platform": "web" }
+  }
+}

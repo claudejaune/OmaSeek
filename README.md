@@ -3,7 +3,7 @@
 Omarchy's home page, for DeepSeek Harness: its 22 palettes, its hero pixel field, and its
 now-playing card.
 
-Three features, one install:
+Three plugins, one repository — install any of them, or all three:
 
 - **OmaSeek** — the 22 Omarchy home-page themes as registered harness themes, with a
   scheme-aware picker in **Settings → OmaSeek** and the Omarchy corner radii.
@@ -20,36 +20,42 @@ change a palette.
 ## Install
 
 ```
-dsh plugin --profile web add github:claudejaune/OmaSeek
+dsh plugin --profile web add omaseek-themes omaseek-pixel omaseek-music     # all three
+dsh plugin --profile web add omaseek-pixel                                 # just the hero field
 ```
 
-Then restart the harness. The package contributes one Cordis row (`omaseek`), which is
-dual-face: the Node half serves the theme table and the audio over `/api/omaseek.*`, and the
-browser half registers the themes, the picker, the hero field and the music card.
+Then restart the harness. Each plugin is its own package with its own row, so they appear —
+and load, enable and reload — separately on the Plugins page. Anything you have not added is
+simply not there; none of them needs the others.
 
-- From a checkout: `dsh plugin --profile web add /path/to/OmaSeek`
-- From npm, once published: `dsh plugin --profile web add omaseek`
-- Remove it: `dsh plugin --profile web remove omaseek`
+Straight from GitHub, without publishing anything:
 
-The repository is private for now, so a git install uses your own credentials — the same SSH
-key or token `gh` is already configured with.
+```
+dsh plugin --profile web add "github:claudejaune/OmaSeek#path:/packages/omaseek-pixel"
+```
+
+Or from a checkout: `dsh plugin --profile web add ./packages/omaseek-pixel`.
+Remove one with `dsh plugin --profile web remove omaseek-pixel`.
 
 ## What is in here
 
 | Path | What it is |
 |---|---|
-| `themes.md` | The palette research: 22 themes, their colors, the DSH token mapping |
-| `src/host.js`, `src/host/` | The Node half: `/api/omaseek.themes`, `/api/omaseek.music.*` |
-| `src/client.js`, `src/client/` | The browser half: themes + picker, hero field, music card |
-| `lib/client.js` | The built browser bundle the harness serves (committed — see *Building*) |
-| `cordis.patch.yml` | The bundle layer: the one row that mounts all of it |
+| `packages/omaseek-themes/` | The 22 themes, the scheme-aware picker, the corner shapes — and `themes.md`, the palette research behind them |
+| `packages/omaseek-pixel/` | The hero headline rotation and the pixel field |
+| `packages/omaseek-music/` | The now-playing card and the two routes that feed it |
+| `build/` | The bundler that turns each browser half into what the harness serves, and the test suite |
 | `tools/` | The palette-table extractor and its generated snapshot |
+
+Each package is self-contained: its own Node half, its own browser half, its own built bundle
+and its own row. There is no umbrella package — "install all three" is one command with three
+names, so taking one of them is a first-class choice rather than a special case.
 
 The features were first built as **dynamic Cordis packages** — defined and run inside one
 session, re-definable while the process lives. That path has no install story: a dynamic
-package dies with the process and cannot be published. `src/` is the supported copy, and the
-dynamic originals live in this checkout under `plugins/` (deliberately untracked, since they
-are the same features a second time). If you change a feature, change `src/`.
+package dies with the process and cannot be published. The packages here are the supported
+copy, and the dynamic originals live in this checkout under `plugins/` (deliberately
+untracked, since they are the same features a second time).
 
 ## The features
 
@@ -156,33 +162,32 @@ so, rather than throwing.
 
 ## Building
 
-The browser half is the only built artifact:
-
 ```
-node build/bundle-client.mjs      # or: pnpm run build — writes lib/client.js
+pnpm build      # writes each package's lib/client.js
+pnpm smoke      # runs every bundle the way the page does
+pnpm check      # both
 ```
 
-`lib/client.js` **is committed**. Git installs fetch sources, not built artifacts, and pnpm
-refuses to run a git dependency's build script until the user allowlists it — so committing
-the bundle is what lets `dsh plugin --profile web add github:…` work with no build permission
-and no prompt. `pnpm publish` rebuilds it anyway through `prepack`, so the npm tarball is
-never stale.
+Each `lib/client.js` **is committed**. Git installs fetch sources, not built artifacts, and
+pnpm refuses to run a git dependency's build script until the user allowlists it — so
+committing the bundles is what lets `dsh plugin add github:…` work with no build permission
+and no prompt. `pnpm -r publish` rebuilds them through `prepack` anyway, so the npm tarballs
+are never stale.
 
-**Source rules for `src/client/`** (the bundler enforces them and fails loudly):
+**Source rules for a browser half** (the bundler enforces them and fails loudly):
 
 - Plain JavaScript ESM. No TypeScript, no JSX.
 - Imports are `react` — which comes off the page's module table, never a bundled copy — or a
-  relative `.js` path inside `src/client/`. Nothing else: a second React or a second Cordis
-  in the page would break the shell's own state.
+  relative `.js` path inside that package. Nothing else: a second React or a second Cordis in
+  the page would break the shell's own state.
 - Only `export function name(…)` and `export const name = …`. No default exports, no
   `export { … } from`, no side-effect imports.
-- Shared browser helpers live beside the features: `src/client/dom.js` (`insertSheet` for a
-  stylesheet the plugin owns and removes, `fetchJson` for this package's own
-  `/api/omaseek.*` routes), `src/client/ui.js` (`h`, `createNotifier`) and
-  `src/client/color.js` (`mix`, `toRgb`).
+- A browser half cannot import from a sibling package — each bundle is its own world — so the
+  few shared helpers (`h`, `createNotifier`, the sheet and fetch seams, the color blend) live
+  in each package that needs them.
 
-The Node half is not built at all — it ships as the ESM in `src/host.js`, `main` points at
-it, and the host resolves `themes.md` and the music file relative to the installed package.
+The Node halves are not built at all: each ships as the ESM its `main` points at, and each
+resolves its own data (`themes.md`, the music file) relative to the installed package.
 
 ## Layout of the seam
 
@@ -193,7 +198,9 @@ evaluator. An installed package gets neither, so:
   (`insertSheet`), the way the shipped client plugins do it.
 - **Browser → Node** goes over the Connection Fetch bridge:
   `ctx.connection.fetch.register({ path: '/api/omaseek.…', … })` on the Node half, an
-  ordinary same-origin `fetch()` in the browser half. The carrier authenticates and fences
+  ordinary same-origin `fetch()` in the browser half. The themes plugin serves
+  `/api/omaseek.themes`; the music plugin serves `/api/omaseek.music.meta` and
+  `/api/omaseek.music.chunk`; the hero needs no Node half at all. The carrier authenticates and fences
   `/api/*` before the plugin sees the request, so the plugin adds no auth of its own. Routes
   must live under `/api/` with segments matching `^[A-Za-z0-9_$.-]+$`.
 
@@ -203,16 +210,13 @@ return early rather than failing, so the package loads into any composition.
 ## Releasing
 
 ```
-pnpm version patch          # or minor / major
-pnpm publish                # prepack rebuilds lib/client.js
+pnpm -r publish --access public     # or: pnpm publish:all
 ```
 
-`publishConfig.access` is already `public`; nothing here is scoped, so no npm org is needed —
-only an npm account and an available name. Once published, `dsh plugin --profile web add
-omaseek` installs the prebuilt tarball with no build permission at all.
-
-For a git-based release, tag the commit (`git tag v0.1.0 && git push --tags`) so users can
-pin: `dsh plugin --profile web add github:claudejaune/OmaSeek#v0.1.0`.
+Three packages, three names, one command: `omaseek-themes`, `omaseek-pixel` and
+`omaseek-music`. `prepack` rebuilds each bundle first. For a git-based release, tag the
+commit (`git tag v0.1.0 && git push --tags`) so users can pin a folder:
+`dsh plugin --profile web add "github:claudejaune/OmaSeek#v0.1.0&path:/packages/omaseek-pixel"`.
 
 ## Verifying the theme table
 
