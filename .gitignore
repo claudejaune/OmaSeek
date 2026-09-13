@@ -21,3 +21,6 @@ references/
 
 # Packed tarballs from a release check
 *.tgz
+# The dynamic-package copies of the same features: kept in the working tree for
+# the in-session dev loop, never published. src/ is the supported copy.
+plugins/

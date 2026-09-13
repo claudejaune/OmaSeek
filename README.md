@@ -43,12 +43,13 @@ key or token `gh` is already configured with.
 | `src/client.js`, `src/client/` | The browser half: themes + picker, hero field, music card |
 | `lib/client.js` | The built browser bundle the harness serves (committed — see *Building*) |
 | `cordis.patch.yml` | The bundle layer: the one row that mounts all of it |
-| `plugins/` | The older dynamic-package sources, kept for the in-session dev loop |
+| `tools/` | The palette-table extractor and its generated snapshot |
 
-`plugins/` is how these features were first built: each was defined and run as a temporary
-dynamic Cordis package, re-definable while the process lives. That path has no install story
-— a dynamic package dies with the process and cannot be published — so `src/` is the
-supported copy. The two are the same behaviour; if you change a feature, change `src/`.
+The features were first built as **dynamic Cordis packages** — defined and run inside one
+session, re-definable while the process lives. That path has no install story: a dynamic
+package dies with the process and cannot be published. `src/` is the supported copy, and the
+dynamic originals live in this checkout under `plugins/` (deliberately untracked, since they
+are the same features a second time). If you change a feature, change `src/`.
 
 ## The features
 
@@ -80,7 +81,7 @@ own text back on stop.
 cells whose resting luminance comes from a drifting value-noise blob, dithered down to those
 cells with the same 8×8 Bayer matrix the site uses, lit further by the cursor, and stamped by
 a press with the Omarchy mark growing out of the click point and dissolving back through the
-dither. Ported from `references/omarchy-site/src/components/HeroPixelField.tsx`.
+dither. Ported from omarchy.org's own `HeroPixelField.tsx`.
 
 It is the site's field, not an impression of it:
 
@@ -185,12 +186,13 @@ pin: `dsh plugin --profile web add github:claudejaune/OmaSeek#v0.1.0`.
 ## Verifying the theme table
 
 ```
-node plugins/tools/extract-theme-table.mjs
+node tools/extract-theme-table.mjs
 ```
 
-Parses the same tables independently and rewrites `plugins/themes.generated.js`, a flat
+Parses the same tables independently and rewrites `tools/themes.generated.js`, a flat
 snapshot of all 22 × 14 source colors. Commit it after editing `themes.md` so a palette
-change shows up as a reviewable diff; no runtime code imports it.
+change shows up as a reviewable diff; no runtime code imports it — the Node half parses
+`themes.md` directly, so the doc stays the only place a hex value is written.
 
 ## How the theming works
 
@@ -241,4 +243,4 @@ Omarchy's own palette values come from the [Omarchy repo](https://github.com/oma
 (`themes/<id>/colors.toml`) and the home page's CSS bundle. Canonical palettes come from each
 theme's official project — links for all of them are in the Sources section of `themes.md`.
 The hero field and the now-playing card are ports of
-`omarchy.org`'s `HeroPixelField.tsx` and music card, kept under `references/`.
+`omarchy.org`'s `HeroPixelField.tsx` and its music card.
