@@ -48,14 +48,7 @@ Remove one with `dsh plugin --profile web remove omaseek-pixel`.
 | `tools/` | The palette-table extractor and its generated snapshot |
 
 Each package is self-contained: its own Node half, its own browser half, its own built bundle
-and its own row. There is no umbrella package — "install all three" is one command with three
-names, so taking one of them is a first-class choice rather than a special case.
-
-The features were first built as **dynamic Cordis packages** — defined and run inside one
-session, re-definable while the process lives. That path has no install story: a dynamic
-package dies with the process and cannot be published. The packages here are the supported
-copy, and the dynamic originals live in this checkout under `plugins/` (deliberately
-untracked, since they are the same features a second time).
+and its own row. Any one of them runs on its own.
 
 ## The features
 
@@ -112,7 +105,7 @@ It is the site's field, not an impression of it:
   `clamp((y − 24) / 130, 0.16, 1)` that keeps the top of the panel at 16 % and fades it in.
 - **The cells are derived, not fixed**: one cell is the wordmark slot (88 % of the panel less
   a 48 px inset, capped at 896 px) over its **81** columns — about 11 CSS px, the site's own
-  density. A hard-coded 8 px cell is what made an earlier revision read as twice as busy.
+  density.
 - **Nothing is clipped.** The canvas covers the panel and the ramp alone carves the clear
   column, so there is no straight internal edge anywhere in the field.
 
@@ -191,8 +184,7 @@ resolves its own data (`themes.md`, the music file) relative to the installed pa
 
 ## Layout of the seam
 
-A dynamic Cordis package gets `styles.insert(css)` and `host.call(method)` from its
-evaluator. An installed package gets neither, so:
+A browser half reaches the page and the Node process through two seams:
 
 - **Styles** go in as a tagged `<style>` element owned by the registering fiber
   (`insertSheet`), the way the shipped client plugins do it.

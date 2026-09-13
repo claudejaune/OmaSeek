@@ -10,11 +10,9 @@
  * `OMASEEK_MUSIC_PATH` at a file of your own instead; the art and timeline are
  * optional extras beside it.
  *
- * Routing the bytes rather than the JSON window the dynamic Package used is
- * the reason this half exists at all: `/api/omaseek.music.chunk` answers a byte
- * range as `audio/mpeg`, so the browser half reads an `ArrayBuffer` and never
- * pays the base64 third it used to, and the carrier authenticates the request
- * before the plugin sees it.
+ * `/api/omaseek.music.chunk` answers a byte range as `audio/mpeg`, so the
+ * browser half reads an `ArrayBuffer` and never pays a base64 third, and the
+ * carrier authenticates the request before the plugin sees it.
  *
  * `fs` is an optional Service: a host that mounts one serves the files through
  * its own sandbox, and a host that does not gets the Node builtin reading the

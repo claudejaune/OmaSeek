@@ -1,12 +1,9 @@
 /**
- * The two seams every OmaSeek browser feature shares.
+ * The two seams a browser half uses.
  *
- * A dynamic Cordis package gets `styles.insert(css)` and `host.call(method)`
- * handed to it by the evaluator. An installed package gets neither: its
- * browser half is a plain module in the page, and its Node half is a plain
- * plugin in the harness. So the sheet goes in the way the shipped plugins do
- * — a tagged `<style>` the plugin owns and removes — and the call goes over
- * the same authenticated `/api/*` bridge the shell uses for its own data.
+ * A sheet goes in as a tagged `<style>` the plugin owns and removes, and a call
+ * to this package's Node half goes over the same authenticated `/api/*` bridge
+ * the shell uses for its own data.
  */
 
 /**

@@ -19,8 +19,7 @@
  *
  * The bytes arrive from this package's Node half over `/api/omaseek.music.*`:
  * metadata, the art and the timeline in one call, the MP3 as raw windows
- * stitched into a Blob URL — no base64 hop, so the third the old JSON channel
- * spent on encoding is spent on the track. Browsers will not autoplay sound
+ * stitched into a Blob URL. Browsers will not autoplay sound
  * without a gesture, so the card starts paused — ring pulsing, one click from
  * the sound.
  *

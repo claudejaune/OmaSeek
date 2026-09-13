@@ -14,15 +14,14 @@
  * else: rewrite our own ESM into a tiny module registry, keep bare specifiers
  * as `require` calls, and hand the entry's exports back as the package's. Our
  * source style is constrained to make that safe — the rules are in README.md
- * under "Source rules for `src/client/`".
+ * under "Source rules for a browser half".
  *
- * Two lessons are baked in. The generator must never emit a bundle it has not
- * compiled (an earlier version shipped a named import scoped inside a block,
- * and `node --check` does not look inside a factory body), and it must read
- * structure rather than raw text (the word `import` in a comment is not an
- * import, and a trailing semicolon is not an error). Comments, string contents
- * and template contents are blanked before scanning; anything the scanner
- * cannot express is a thrown error naming the file, never a silent pass.
+ * Two rules keep it honest: it never writes a bundle it has not compiled
+ * (`node --check` does not look inside a factory body), and it reads structure
+ * rather than raw text — the word `import` in a comment is not an import, and a
+ * trailing semicolon is not an error. Comments, string contents and template
+ * contents are blanked before scanning; anything the scanner cannot express is
+ * a thrown error naming the file, never a silent pass.
  *
  * Output: lib/client.js. Nothing here touches the Node half, which ships as
  * plain ESM straight out of src/.

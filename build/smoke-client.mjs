@@ -9,9 +9,8 @@
  * services and slots answer, renders every component the feature registered,
  * and then runs every disposer it returned. It runs on every `pnpm check`.
  *
- * Every package is checked, and each is checked *alone*: a feature that only
- * worked because a sibling happened to be loaded is the exact failure the split
- * could introduce, so nothing here ever mounts two of them together.
+ * Every package is checked on its own, the way one of them is installed: no
+ * case here mounts two of them together.
  *
  * It is not a browser, and the stub React is not React: hooks have no order, no
  * re-render and no dependency comparison, so a hook-rule violation or an

@@ -1,9 +1,7 @@
 /**
- * The few things all three browser features build with.
- *
- * They began life as three separate dynamic packages, each carrying its own
- * copy of these — the same seven-line `h`, the same listener list. Nothing in
- * that duplication was load-bearing, so it lives here once.
+ * The two things every browser feature here builds with: `h`, and the listener
+ * list behind each Settings page. A bundle cannot import from a sibling
+ * package, so each package that needs them carries its own copy.
  */
 import React from 'react'
 
