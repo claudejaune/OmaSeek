@@ -98,6 +98,8 @@ const React = {
 // page through that same object — so the stubs and the facade are one value,
 // and `window` inside the bundle is that value rather than a bare object.
 let loaded = null
+/** Backing store for the localStorage stub; reset per scenario. */
+const store = new Map()
 const windowStub = {
   __ModuleLoader__: { load(definition) { loaded = definition } },
   document: documentStub,
@@ -112,6 +114,11 @@ const windowStub = {
   removeEventListener: () => {},
   getComputedStyle: () => ({ getPropertyValue: () => '', color: 'rgb(0, 0, 0)' }),
   location: { href: 'http://127.0.0.1:3113/', search: '' },
+  localStorage: {
+    getItem: (key) => (store.has(key) ? store.get(key) : null),
+    setItem: (key, value) => { store.set(key, String(value)) },
+    removeItem: (key) => { store.delete(key) },
+  },
   navigator: { userAgent: 'smoke' },
 }
 
@@ -137,6 +144,8 @@ function palette() {
 
 const THEMES = {
   themes: [
+    { id: 'catppuccin', name: 'Catppuccin', scheme: 'dark', palette: palette() },
+    { id: 'catppuccin-latte', name: 'Catppuccin Latte', scheme: 'light', palette: palette() },
     { id: 'tokyo-night', name: 'Tokyo Night', scheme: 'dark', palette: palette() },
     { id: 'white', name: 'White', scheme: 'light', palette: palette() },
   ],
@@ -149,19 +158,55 @@ const HOSTS = [
     label: 'healthy host',
     themes: THEMES,
     meta: { title: 'T', artist: 'A', size: 4096, art: '', timeline: TIMELINE, icons: null },
-    expectThemes: 2,
+    expectThemes: 4,
+    scheme: 'dark',
+    // Nobody has chosen: the dark UI opens on Catppuccin.
+    expectApplied: 'omarchy-catppuccin',
   },
   {
     label: 'host with no music file',
     themes: THEMES,
     meta: { title: 'T', artist: 'A', size: 0, art: '', timeline: null, icons: null },
-    expectThemes: 2,
+    expectThemes: 4,
+    scheme: 'dark',
+    expectApplied: 'omarchy-catppuccin',
   },
   {
     label: 'host whose music route fails',
     themes: THEMES,
     meta: null,
-    expectThemes: 2,
+    expectThemes: 4,
+    scheme: 'dark',
+    expectApplied: 'omarchy-catppuccin',
+  },
+  {
+    label: 'light scheme',
+    themes: THEMES,
+    meta: { title: 'T', artist: 'A', size: 0, art: '', timeline: null, icons: null },
+    expectThemes: 4,
+    scheme: 'light',
+    // …and a light one on Catppuccin Latte.
+    expectApplied: 'omarchy-catppuccin-latte',
+  },
+  {
+    label: 'remembered choice',
+    themes: THEMES,
+    meta: { title: 'T', artist: 'A', size: 0, art: '', timeline: null, icons: null },
+    expectThemes: 4,
+    scheme: 'dark',
+    stored: { dark: 'omarchy-tokyo-night' },
+    // The stored palette wins over the automatic one.
+    expectApplied: 'omarchy-tokyo-night',
+  },
+  {
+    label: 'remembered opt-out',
+    themes: THEMES,
+    meta: { title: 'T', artist: 'A', size: 0, art: '', timeline: null, icons: null },
+    expectThemes: 4,
+    scheme: 'dark',
+    stored: { dark: 'base' },
+    // `base` means the harness palette: nothing is applied at all.
+    expectApplied: null,
   },
 ]
 
@@ -169,12 +214,14 @@ const HOSTS = [
 
 /** Every service the features read, plus a log of what they did with them. */
 function makeServices() {
-  const calls = { registered: [], sections: [], overlays: [], themeRegistrations: [], disposers: [] }
+  const calls = { registered: [], sections: [], overlays: [], themeRegistrations: [], disposers: [], themeSet: [] }
 
   const themeService = {
     register(definition) { calls.themeRegistrations.push(definition); return () => {} },
-    getTheme() { return { active: { id: 'dark', colorScheme: 'dark' }, preference: 'system' } },
-    setTheme() {},
+    getTheme() {
+      return { active: { id: 'dark', colorScheme: calls.scheme }, preference: 'system' }
+    },
+    setTheme(id) { calls.themeSet.push(id) },
   }
 
   // The real registry runs a contribution's callback only once its slot is
@@ -232,6 +279,11 @@ if (loaded.id !== 'omaseek') throw new Error(`omaseek: bundle registered as "${l
 
 async function runHost(host) {
   const { calls, ctx } = makeServices()
+  calls.scheme = host.scheme
+  store.clear()
+  for (const [scheme, id] of Object.entries(host.stored === undefined ? {} : host.stored)) {
+    store.set('omaseek.themes', JSON.stringify({ [scheme]: id }))
+  }
 
   globalThis.fetch = async (path) => {
     if (path === '/api/omaseek.themes') return jsonResponse(host.themes)
@@ -267,6 +319,15 @@ async function runHost(host) {
   if (!calls.sections.includes('shell.overlay')) problems.push('no shell.overlay registration')
   if (calls.overlays.length !== 1) problems.push(`registered ${calls.overlays.length} overlay cards, expected 1`)
   if (calls.disposers.length === 0) problems.push('no owned effects were registered')
+
+  // Which palette the picker put in force for this scheme.
+  const applied = calls.themeSet.filter((id) => id.startsWith('omarchy-'))
+  const wanted = host.expectApplied === undefined ? null : host.expectApplied
+  if (wanted === null) {
+    if (applied.length > 0) problems.push(`applied ${applied.join(', ')} where none was expected`)
+  } else if (!applied.includes(wanted)) {
+    problems.push(`applied ${applied.length === 0 ? 'nothing' : applied.join(', ')}; expected ${wanted}`)
+  }
 
   const rendered = renderAll(calls, problems)
 

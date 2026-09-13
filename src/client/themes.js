@@ -20,38 +20,12 @@
  */
 
 import React from 'react'
+import { mix } from './color.js'
 import { fetchJson, insertSheet } from './dom.js'
+import { createNotifier, h } from './ui.js'
 
 /** Token this theme paints the user (and steering) bubble with. */
 var BUBBLE = '--dsw-specific-bubble'
-
-/**
- * Blend two colors: `amount` of `to` over `from`, as `#rrggbb`.
- * Omarchy tints the user bubble with brand at 12.15 % over the app background;
- * the same math gives every derived surface below a consistent step.
- */
-function mix(from, to, amount) {
-  var a = toRgb(from), b = toRgb(to), out = '#'
-  for (var i = 0; i < 3; i += 1) {
-    var v = Math.round(a[i] + (b[i] - a[i]) * amount)
-    var hex = v.toString(16)
-    out += hex.length < 2 ? '0' + hex : hex
-  }
-  return out
-}
-
-var NAMED = { silver: 'c0c0c0', white: 'ffffff', black: '000000', gray: '808080', grey: '808080' }
-
-/** Parse a hex or the handful of CSS names the source tables use. */
-function toRgb(value) {
-  var raw = String(value === undefined || value === null ? '' : value).trim().toLowerCase()
-  if (NAMED[raw] !== undefined) raw = NAMED[raw]
-  var hex = raw.charAt(0) === '#' ? raw.slice(1) : raw
-  if (hex.length === 3) hex = hex.charAt(0) + hex.charAt(0) + hex.charAt(1) + hex.charAt(1) + hex.charAt(2) + hex.charAt(2)
-  if (hex.length !== 6) return [128, 128, 128]
-  var n = parseInt(hex, 16)
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
-}
 
 /**
  * Expand one 15-color research palette into the token map `theme.register`
@@ -127,6 +101,25 @@ var CORNER_SHEET = {
 
 var CORNER_LABELS = { squircle: 'Squircle', square: 'Square' }
 
+/**
+ * Where a scheme's remembered palette lives.
+ *
+ * `theme.setTheme()` persists only the harness's own `light`/`dark`/`system`
+ * preference, so an Omarchy palette would be forgotten by every reload. The
+ * picker keeps its own note instead: one slot per scheme, because the two are
+ * never both in force — a dark palette is only ever offered over a dark UI.
+ */
+var STORAGE_KEY = 'omaseek.themes'
+
+/**
+ * What a scheme paints with when nobody has chosen one: the pair Omarchy itself
+ * opens on. A light UI gets Catppuccin Latte, a dark one gets Catppuccin.
+ */
+var AUTOMATIC = { light: 'omarchy-catppuccin-latte', dark: 'omarchy-catppuccin' }
+
+/** A scheme's slot when the reader asked for the harness's own palette. */
+var HARNESS = 'base'
+
 var CSS = [
   '.omaseek{display:flex;flex-direction:column;gap:20px;max-width:1000px}',
   '.omaseek-title{font-size:16px;font-weight:600;color:var(--dsw-alias-label-primary)}',
@@ -175,13 +168,6 @@ var CSS = [
   'background:color-mix(in oklch, var(--dsw-alias-brand-primary), white 14%)}',
 ].join('\n')
 
-/** createElement shorthand — this Package is not compiled, so no JSX. */
-function h(type, props) {
-  var children = []
-  for (var i = 2; i < arguments.length; i += 1) children.push(arguments[i])
-  return React.createElement.apply(null, [type, props].concat(children))
-}
-
 export function applyFeature(host) {
   // The feature attaches when its services exist: the page's plugin tree is
   // still assembling while this apply runs, so a plain `ctx.get` here would
@@ -194,15 +180,67 @@ export function applyFeature(host) {
   // Package-local store: the palettes arrive asynchronously from the Host,
   // and the Settings page subscribes instead of polling.
   var state = { entries: [], error: '', loading: true, corners: 'square' }
-  var subs = []
-  function notify() {
-    for (var i = 0; i < subs.length; i += 1) subs[i]()
+  var notifier = createNotifier()
+  var notify = notifier.notify
+  var subscribe = notifier.subscribe
+
+  /** `{ light: id | 'base', dark: … }` — a missing slot means "automatic". */
+  var choices = loadChoices()
+
+  function loadChoices() {
+    try {
+      var raw = window.localStorage.getItem(STORAGE_KEY)
+      if (raw === null) return {}
+      var parsed = JSON.parse(raw)
+      return parsed !== null && typeof parsed === 'object' ? parsed : {}
+    } catch (unavailable) {
+      // Private mode, or storage denied: the picker still works for this page,
+      // it just cannot remember across reloads.
+      return {}
+    }
   }
-  function subscribe(fn) {
-    subs.push(fn)
-    return function () {
-      var at = subs.indexOf(fn)
-      if (at >= 0) subs.splice(at, 1)
+
+  function saveChoices() {
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(choices))
+    } catch (unavailable) {
+      // Same as above: a preference that cannot be written is not an error.
+    }
+  }
+
+  /** The id this scheme should be painting with, or null to leave it alone. */
+  function wantedFor(scheme) {
+    var chosen = choices[scheme]
+    if (chosen === HARNESS) return null
+    if (typeof chosen === 'string' && chosen !== '') return chosen
+    return AUTOMATIC[scheme] === undefined ? null : AUTOMATIC[scheme]
+  }
+
+  /**
+   * Put the scheme's palette in force. Called when the palettes arrive, when
+   * the scheme flips, and never in a loop: applying what is already active is
+   * the one case that returns early, and `setTheme` is what fires the change
+   * this listens for.
+   */
+  function applyForScheme() {
+    if (state.loading || state.error !== '') return
+    var snapshot = theme.getTheme()
+    var scheme = snapshot.active.colorScheme
+    var wanted = wantedFor(scheme)
+    if (wanted === null || wanted === snapshot.active.id) return
+    // Only a palette this package registered: ids come from the research doc,
+    // and a doc that dropped one should leave the harness palette rather than
+    // throw inside a theme-change listener.
+    var known = false
+    for (var i = 0; i < state.entries.length; i += 1) {
+      if (state.entries[i].id === wanted) known = true
+    }
+    if (!known) return
+    try {
+      theme.setTheme(wanted)
+    } catch (error) {
+      state.error = String((error && error.message) || error)
+      notify()
     }
   }
 
@@ -252,6 +290,7 @@ export function applyFeature(host) {
       state.entries = entries.sort(function (a, b) { return a.name.localeCompare(b.name) })
       state.error = ''
       state.loading = false
+      applyForScheme()
       notify()
     }, function (error) {
       if (!live) return
@@ -266,6 +305,12 @@ export function applyFeature(host) {
       for (var i = disposers.length - 1; i >= 0; i -= 1) disposers[i]()
     }
   }, 'omaseek: theme registry')
+
+  ctx.effect(function () {
+    // Light and dark each remember a palette, so the scheme decides which one
+    // is in force — a click on Light is not a request to forget the dark pick.
+    return ctx.on('theme/change', function () { applyForScheme() })
+  }, 'omaseek: scheme palette')
 
   /** One theme card: a miniature of the palette, painted with its own tokens. */
   function Swatch(props) {
@@ -299,13 +344,28 @@ export function applyFeature(host) {
     var listed = state.entries.filter(function (entry) { return entry.scheme === scheme })
 
     function choose(entry) {
+      // Remembered against its own scheme: a light pick is not a statement
+      // about what a dark UI should wear.
+      choices[entry.scheme] = entry.id
+      saveChoices()
       try { theme.setTheme(entry.id) } catch (error) {
         state.error = String((error && error.message) || error)
         bump()
       }
     }
-    // Leaving the Omarchy set: the built-in preferences are always available.
+
+    // The harness's own palettes, always available. Picking Light or Dark is
+    // also the opt-out for that scheme: it stops the automatic Catppuccin from
+    // painting over the choice on the next scheme change. System forgets both
+    // slots, which is how a reader gets back to automatic.
     function base(id) {
+      if (id === 'system') {
+        delete choices.light
+        delete choices.dark
+      } else {
+        choices[id] = HARNESS
+      }
+      saveChoices()
       try { theme.setTheme(id) } catch (error) {
         state.error = String((error && error.message) || error)
         bump()
@@ -349,7 +409,9 @@ export function applyFeature(host) {
       h('span', { className: 'omaseek-legend' }, scheme === 'light' ? 'Light themes' : 'Dark themes'),
       h('span', { className: 'omaseek-count' }, state.loading
         ? 'loading palettes\u2026'
-        : listed.length + (scheme === 'light' ? ' of 5' : ' of 17'))))
+        : listed.length + ' of ' + state.entries.filter(function (entry) {
+          return entry.scheme === scheme
+        }).length + (choices[scheme] === undefined ? ' \u00b7 automatic' : ''))))
 
     children.push(h('div', { key: 'grid', className: 'omaseek-grid' },
       listed.map(function (entry) {

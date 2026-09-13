@@ -59,6 +59,22 @@ Every theme is registered with `theme.register({ id, colorScheme, tokens })` and
 the **Settings → OmaSeek** page: scheme chips, one card per theme with a live miniature of
 its palette, the active one marked.
 
+**It opens on Catppuccin.** With nothing chosen, a light UI gets **Catppuccin Latte** and a
+dark one gets **Catppuccin** — the pair Omarchy itself opens on. The picker follows the
+scheme rather than the click: switching Light ↔ Dark re-applies that scheme's palette, and
+each scheme remembers its own choice, so a light pick is never a statement about what a dark
+UI should wear.
+
+**The choice survives a reload**, which the harness alone cannot do: `theme.setTheme()`
+persists only its own `light`/`dark`/`system` preference, so an Omarchy palette would be
+forgotten on every reload. The picker keeps its own note in `localStorage` under
+`omaseek.themes`, one slot per scheme. Clearing site data, or pressing **System**, returns
+both schemes to automatic.
+
+**Opting out is a click.** The **Light** and **Dark** chips are the harness's own palettes,
+and choosing one for a scheme also tells the picker to stop painting over it — otherwise the
+automatic Catppuccin would come straight back on the next scheme change.
+
 Each theme is registered with the `colorScheme` Omarchy assigns it, so every theme is half
 of a pair — a dark theme has no light variant. The picker therefore reads
 `getTheme().active.colorScheme` and lists only the themes belonging to the scheme now in
@@ -146,9 +162,10 @@ never stale.
   in the page would break the shell's own state.
 - Only `export function name(…)` and `export const name = …`. No default exports, no
   `export { … } from`, no side-effect imports.
-- Shared browser helpers live in `src/client/dom.js`: `insertSheet(css, id)` for a stylesheet
-  the plugin owns and removes, `fetchJson(path)` for this package's own `/api/omaseek.*`
-  routes.
+- Shared browser helpers live beside the features: `src/client/dom.js` (`insertSheet` for a
+  stylesheet the plugin owns and removes, `fetchJson` for this package's own
+  `/api/omaseek.*` routes), `src/client/ui.js` (`h`, `createNotifier`) and
+  `src/client/color.js` (`mix`, `toRgb`).
 
 The Node half is not built at all — it ships as the ESM in `src/host.js`, `main` points at
 it, and the host resolves `themes.md` and the music file relative to the installed package.
@@ -233,9 +250,9 @@ steering) message only — `MessageItem.tsx`'s `UserStyleBubble` documents itsel
 `AssistantMarkdown`, which has no background declaration at all: it is plain text on
 `--dsw-alias-bg-base`, so it follows the text/background tokens and needs no surface color.
 
-**A picked theme is not persisted by the shell.** `setTheme()` only writes the built-in
-`light`/`dark`/`system` preference to settings, so an Omarchy theme can be lost on reload.
-The picker keeps the choice for the life of the page.
+**The shell does not persist a picked theme; the picker does.** `setTheme()` only writes the
+built-in `light`/`dark`/`system` preference to settings. OmaSeek therefore remembers its own
+choice per scheme in `localStorage` (`omaseek.themes`) and re-applies it on load.
 
 ## Sources
 

@@ -21,34 +21,9 @@
  */
 
 import React from 'react'
+import { mix } from './color.js'
 import { insertSheet } from './dom.js'
-
-/**
- * Blend two colors: `amount` of `to` over `from`, as `#rrggbb`.
- * The field's ramp — dim, mid, lit, crest — falls out of these steps.
- */
-function mix(from, to, amount) {
-  var a = toRgb(from), b = toRgb(to), out = '#'
-  for (var i = 0; i < 3; i += 1) {
-    var v = Math.round(a[i] + (b[i] - a[i]) * amount)
-    var hex = v.toString(16)
-    out += hex.length < 2 ? '0' + hex : hex
-  }
-  return out
-}
-
-var NAMED = { silver: 'c0c0c0', white: 'ffffff', black: '000000', gray: '808080', grey: '808080' }
-
-/** Parse a hex or the handful of CSS names a token might read back as. */
-function toRgb(value) {
-  var raw = String(value === undefined || value === null ? '' : value).trim().toLowerCase()
-  if (NAMED[raw] !== undefined) raw = NAMED[raw]
-  var hex = raw.charAt(0) === '#' ? raw.slice(1) : raw
-  if (hex.length === 3) hex = hex.charAt(0) + hex.charAt(0) + hex.charAt(1) + hex.charAt(1) + hex.charAt(2) + hex.charAt(2)
-  if (hex.length !== 6) return [128, 128, 128]
-  var n = parseInt(hex, 16)
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
-}
+import { createNotifier, h } from './ui.js'
 
 /**
  * What the New Session hero's pixel field does.
@@ -817,13 +792,6 @@ var CSS = [
   '@keyframes omap-caret{0%,50%{opacity:1}50.01%,100%{opacity:0}}',
 ].join('\n')
 
-/** createElement shorthand — this Package is not compiled, so no JSX. */
-function h(type, props) {
-  var children = []
-  for (var i = 2; i < arguments.length; i += 1) children.push(arguments[i])
-  return React.createElement.apply(null, [type, props].concat(children))
-}
-
 export function applyFeature(host) {
   // The feature attaches when its services exist: the page's plugin tree is
   // still assembling while this apply runs, so a plain `ctx.get` here would
@@ -837,17 +805,9 @@ export function applyFeature(host) {
   // package could persist them, but a hero field that comes back off after a
   // reload would be the surprise, not the feature.)
   var state = { field: 'interactive', typing: 'loop' }
-  var subs = []
-  function notify() {
-    for (var i = 0; i < subs.length; i += 1) subs[i]()
-  }
-  function subscribe(fn) {
-    subs.push(fn)
-    return function () {
-      var at = subs.indexOf(fn)
-      if (at >= 0) subs.splice(at, 1)
-    }
-  }
+  var notifier = createNotifier()
+  var notify = notifier.notify
+  var subscribe = notifier.subscribe
 
   // The hero field is chrome: it belongs to whatever element is currently
   // the New Session hero, not to the Settings page that switches it.

@@ -31,6 +31,7 @@
 
 import React from 'react'
 import { fetchJson, insertSheet } from './dom.js'
+import { createNotifier, h } from './ui.js'
 
 /** Fallback identity; the Node half serves the same strings. */
 var TRACK = {
@@ -161,13 +162,6 @@ var CSS = [
   '.omamusic-tip-artist{font-size:11px;color:var(--dsw-alias-label-secondary)}',
 ].join('\n')
 
-/** createElement shorthand — this Package is not compiled, so no JSX. */
-function h(type, props) {
-  var children = []
-  for (var i = 2; i < arguments.length; i += 1) children.push(arguments[i])
-  return React.createElement.apply(null, [type, props].concat(children))
-}
-
 /**
  * Transport glyphs borrowed from radio.omarchy.org (src/lib/icons.ts) and
  * kept as this plugin's own file at `assets/icons/transport.json`, which the
@@ -241,17 +235,9 @@ export function applyFeature(host) {
    *  again lets it run. Sound and progress carry on either way. */
   var vizPaused = false
 
-  var subs = []
-  function announce() {
-    for (var i = 0; i < subs.length; i += 1) subs[i]()
-  }
-  function subscribe(fn) {
-    subs.push(fn)
-    return function () {
-      var at = subs.indexOf(fn)
-      if (at >= 0) subs.splice(at, 1)
-    }
-  }
+  var notifier = createNotifier()
+  var announce = notifier.notify
+  var subscribe = notifier.subscribe
 
   function live() {
     return running && audio !== null && !audio.paused
