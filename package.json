@@ -23,7 +23,8 @@
   "scripts": {
     "build": "node build/bundle-client.mjs",
     "prepack": "node build/bundle-client.mjs",
-    "check": "node build/bundle-client.mjs && node --check src/host.js"
+    "smoke": "node build/smoke-client.mjs",
+    "check": "node build/bundle-client.mjs && node build/smoke-client.mjs && node --check src/host.js"
   },
   "engines": {
     "node": ">=20"

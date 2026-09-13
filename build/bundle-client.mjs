@@ -85,12 +85,14 @@ async function transform(file, seen) {
     const required = `__req(${JSON.stringify(target)})`
     if (clause === '') return ''
     if (/^\{/.test(clause)) {
+      // Bindings land at the module's top level, not in a block: a `{ … }` here
+      // would scope every imported name to itself and the body would read them
+      // as undefined. The `require` is cached, so one call per name is free.
       const names = clause.slice(1, -1).split(',').map((part) => part.trim()).filter(Boolean)
-      const bindings = names.map((name) => {
+      return names.map((name) => {
         const [imported, local = imported] = name.split(/\s+as\s+/).map((p) => p.trim())
-        return `const ${local} = __m.${imported}`
-      })
-      return `{\nconst __m = ${required};\n${bindings.join('\n')}\n/* bound imports */}\n`
+        return `const ${local} = ${required}.${imported}`
+      }).join('\n') + '\n'
     }
     // `import React from 'react'` and `import React, { useState } from 'react'`
     const local = clause.split(',')[0].trim()
