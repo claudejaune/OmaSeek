@@ -9,7 +9,8 @@ hero pixel field and the now-playing card. Each installs on its own.
 ## Install
 
 ```sh
-dsh plugin --profile web add omaseek-themes
+npx @deepseek-ai/dsh plugin --profile web add omaseek-themes   # running with npx
+pnpm dsh plugin --profile web add omaseek-themes               # running from a source checkout
 ```
 
 Restart the harness, then look under **Settings → OmaSeek**. It opens on Catppuccin — Latte

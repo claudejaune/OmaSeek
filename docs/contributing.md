@@ -30,7 +30,7 @@ pnpm check      # both
 
 Each `lib/client.js` **is committed**. Git installs fetch sources, not built artifacts, and
 pnpm refuses to run a git dependency's build script until the user allowlists it — so
-committing the bundles is what lets `dsh plugin add github:…` work with no build permission
+committing the bundles is what lets `plugin add github:…` work with no build permission
 and no prompt. `pnpm -r publish` rebuilds them through `prepack` anyway, so the npm tarballs
 are never stale.
 
@@ -71,4 +71,4 @@ pnpm -r publish --access public     # or: pnpm publish:all
 Three packages, three names, one command: `omaseek-themes`, `omaseek-pixel` and
 `omaseek-music`. `prepack` rebuilds each bundle first. For a git-based release, tag the
 commit (`git tag v0.1.0 && git push --tags`) so users can pin a folder:
-`dsh plugin --profile web add "github:claudejaune/OmaSeek#v0.1.0&path:/packages/omaseek-pixel"`.
+`npx @deepseek-ai/dsh plugin --profile web add "github:claudejaune/OmaSeek#v0.1.0&path:/packages/omaseek-pixel"`.

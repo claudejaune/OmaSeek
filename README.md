@@ -8,21 +8,27 @@ Three plugins in one repository. Install any one of them, or all three.
 ## Quick start
 
 ```
-dsh plugin --profile web add omaseek-themes omaseek-pixel omaseek-music   # all three
-dsh plugin --profile web add omaseek-pixel                               # just the hero field
+# running the harness with npx
+npx @deepseek-ai/dsh plugin --profile web add omaseek-themes omaseek-pixel omaseek-music
+
+# running it from a source checkout
+pnpm dsh plugin --profile web add omaseek-themes omaseek-pixel omaseek-music
 ```
 
-Restart the harness afterwards. Each plugin is its own package with its own row, so they
+Drop the names you do not want — `add omaseek-pixel` installs only the hero field. Restart
+the harness afterwards. Each plugin is its own package with its own row, so they
 appear — and load, reload and switch off — separately on the Plugins page.
 
-Straight from GitHub, before any of it is on npm:
+Straight from GitHub instead of npm:
 
 ```
-dsh plugin --profile web add "github:claudejaune/OmaSeek#path:/packages/omaseek-pixel"
+npx @deepseek-ai/dsh plugin --profile web add "github:claudejaune/OmaSeek#path:/packages/omaseek-pixel"
 ```
 
-From a checkout it is just the folder: `dsh plugin --profile web add ./packages/omaseek-pixel`.
-To remove one: `dsh plugin --profile web remove omaseek-pixel`.
+From a clone of this repository, the same command takes the folder as its argument:
+`./packages/omaseek-pixel`. To remove one, `npx @deepseek-ai/dsh plugin --profile web remove
+omaseek-pixel`. If `dsh` happens to be on your PATH, the plain `dsh` works in place of
+`npx @deepseek-ai/dsh` in every command above.
 
 ## The plugins
 

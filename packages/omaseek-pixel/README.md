@@ -9,7 +9,8 @@ themes and the now-playing card. Each installs on its own.
 ## Install
 
 ```sh
-dsh plugin --profile web add omaseek-pixel
+npx @deepseek-ai/dsh plugin --profile web add omaseek-pixel   # running with npx
+pnpm dsh plugin --profile web add omaseek-pixel               # running from a source checkout
 ```
 
 Restart the harness, then open a New Session. **Settings → OmaPixel** switches the field

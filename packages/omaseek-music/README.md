@@ -9,7 +9,8 @@ themes and the hero pixel field. Each installs on its own.
 ## Install
 
 ```sh
-dsh plugin --profile web add omaseek-music
+npx @deepseek-ai/dsh plugin --profile web add omaseek-music   # running with npx
+pnpm dsh plugin --profile web add omaseek-music               # running from a source checkout
 ```
 
 Restart the harness and click the cover. It streams *We Can Fix Everything (The Ultimate
