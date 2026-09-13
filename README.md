@@ -1,72 +1,69 @@
-# OmaSeek
+# OmaSeek: Omarchy 🤝 DeepSeek Harness
 
-Omarchy's home page for DeepSeek Harness: its 22 themes, its hero pixel field, and its
-now-playing card.
+Use DeepSeek Harness and hate the boring light-dark themes? In love with the Omarchy spirit and aesthetics? We got you covered!
 
-Three plugins in one repository. Install any one of them, or all three.
+Three plugins:
+
+1. **Themes**: all 22 Omarchy light/dark themes, rectangular buttons
+2. **Pixel**: The cool pixel animations on [omarchy.org](https://omarchy.org/)
+3. **Music**: Streams **We Can Fix Everything** by Kevin Koontz (more coming soon!)
 
 ## Quick start
 
-```
-# running the harness with npx
-npx @deepseek-ai/dsh plugin --profile web add omaseek-themes omaseek-pixel omaseek-music
+### `npx` users
 
-# running it from a source checkout
+If you use `npx @deepseek-ai/dsh web` to launch DSH, do this to install all three plugins:
+
+```
+npx @deepseek-ai/dsh plugin --profile web add omaseek-themes omaseek-pixel omaseek-music
+```
+
+OR, pick and choose. Eg., if you don't care about the music player, use this:
+
+```
+npx @deepseek-ai/dsh plugin --profile web add omaseek-themes omaseek-pixel
+```
+
+Then restart the harness.
+
+### Source install users
+
+If you build `dsh` manually from source, run this to install all plugins:
+
+```
+cd /path/to/deepseek-harness
 pnpm dsh plugin --profile web add omaseek-themes omaseek-pixel omaseek-music
 ```
 
-Drop the names you do not want — `add omaseek-pixel` installs only the hero field. Restart
-the harness afterwards. Each plugin is its own package with its own row, so they
-appear — and load, reload and switch off — separately on the Plugins page.
-
-Straight from GitHub instead of npm:
+OR, pick and choose. Eg., if you don't care about the music player, use this:
 
 ```
-npx @deepseek-ai/dsh plugin --profile web add "github:claudejaune/OmaSeek#path:/packages/omaseek-pixel"
+cd /path/to/deepseek-harness
+pnpm dsh plugin --profile web add omaseek-themes omaseek-pixel
 ```
 
-From a clone of this repository, the same command takes the folder as its argument:
-`./packages/omaseek-pixel`. To remove one, `npx @deepseek-ai/dsh plugin --profile web remove
-omaseek-pixel`. If `dsh` happens to be on your PATH, the plain `dsh` works in place of
-`npx @deepseek-ai/dsh` in every command above.
+## Variables
 
-## The plugins
+### Settings → OmaThemes
 
-| Plugin | Package | What it does |
-|---|---|---|
-| **OmaSeek** | `omaseek-themes` | All 22 Omarchy home-page themes, with a picker that follows the light/dark scheme, and Omarchy's corner shapes |
-| **OmaPixel** | `omaseek-pixel` | The New Session hero: the headline types the site's rotation, and the pixel field drifts and answers the cursor behind it |
-| **OmaMusic** | `omaseek-music` | The site's now-playing card, floating in the bottom-left corner |
+- Appearance (Light / Dark / System), themes (duh), and corner shapes (squircle/square)
 
-### What you can change
+### Settings → OmaPixel
 
-- **Settings → OmaSeek** — the scheme chips (Light / Dark / System), the palette cards, and the
-  corner shape. It opens on Catppuccin: Latte while the app is light, Catppuccin while it is
-  dark. Each scheme remembers the palette you picked for it, across reloads; picking Light or
-  Dark is also how you keep the harness's own palette for that scheme.
-- **Settings → OmaPixel** — **Pixel field**: Off, Ambient, or Interactive (cursor glow and
-  press-to-stamp). **Headline**: Loop, the site's rotation, or Once.
-- **OmaMusic** — click the cover to play. It streams the track, sets its own duration, and says
-  on the card when the network or the station is not there. There is no settings page.
-
-## The track
-
-The card streams *We Can Fix Everything (The Ultimate Machine)* by
-[Kevin Koontz](https://x.com/koozeex1) from Omarchy Radio, which is where it lives. To play
-something else, set `OMASEEK_MUSIC_URL`, or `OMASEEK_MUSIC_PATH` for a local file — its cover
-art ships with the plugin either way.
+- Pixel field: _Off_, _Ambient_ (only the background animations), or _Interactive_ (cursor glow and press-to-stamp).
+- Headline: _Loop_ forever or just play _Once_
 
 ## Documentation
 
-- [docs/how-it-works.md](docs/how-it-works.md) — the ports, the palette model, the browser-to-Node seam
-- [docs/contributing.md](docs/contributing.md) — the layout, building, the test suite, releasing
-- [CREDITS.md](CREDITS.md) — what came from where
+- [docs/how-it-works.md](docs/how-it-works.md): technical details for nerds and clankers
+- [docs/contributing.md](docs/contributing.md)
+- [CREDITS.md](CREDITS.md)
 
 ## Credits
 
-- **Omarchy** — the themes, the hero field, the headline rotation and the music card are all
-  ports of [omarchy.org](https://github.com/omacom/omarchy-site)'s own front end.
-- **DeepSeek Harness** — the plugin seams all of this is built on.
+- [DHH]([url](https://x.com/dhh)) (duh) and his beautiful creation **Omarchy**: the themes, the hero field, the headline rotation and the music card are all ports of [omarchy.org](https://github.com/omacom/omarchy-site)'s own front end.
+- [DeepSeek Harness](https://deepseek.com/harness/en/) (also duh): Everything is a plugin, just like OmaSeek
+- *We Can Fix Everything (The Ultimate Machine)* by [Kevin Koontz](https://x.com/koozeex1)
 
 ## License
 
