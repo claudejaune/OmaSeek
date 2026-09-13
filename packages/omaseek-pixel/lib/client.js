@@ -945,6 +945,7 @@ var CSS = [
   '.omapixel-title{font-size:16px;font-weight:600;color:var(--dsw-alias-label-primary)}',
   '.omapixel-note{font-size:12px;line-height:1.6;color:var(--dsw-alias-label-secondary);max-width:62ch}',
   '.omapixel-setting{display:flex;flex-direction:column;gap:8px}',
+  '.omapixel-line{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap}',
   '.omapixel-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}',
   '.omapixel-chip{font:inherit;font-size:12px;padding:4px 12px;border-radius:999px;cursor:pointer;',
   'border:1px solid var(--dsw-alias-border-l2);background:transparent;color:var(--dsw-alias-label-secondary)}',
@@ -1122,8 +1123,11 @@ function applyFeature(host) {
     return h('div', { className: 'omapixel' },
       h('div', null, h('div', { className: 'omapixel-title' }, 'OmaPixel')),
       h('div', { className: 'omapixel-setting' },
+        h('div', { className: 'omapixel-line' },
+          h('span', { className: 'omapixel-legend' }, 'Pixel field:'),
+          h('span', { className: 'omapixel-note' },
+            'The cool pixel animations on omarchy.org (needs page refresh)')),
         h('div', { className: 'omapixel-row' },
-          h('span', { className: 'omapixel-legend' }, 'Pixel field'),
           FIELD_MODES.map(function (mode) {
             return h('button', {
               key: mode,
@@ -1132,12 +1136,13 @@ function applyFeature(host) {
               'data-on': state.field === mode ? '1' : '0',
               onClick: function () { setFieldMode(mode) },
             }, FIELD_LABELS[mode])
-          })),
-        h('div', { className: 'omapixel-note' },
-          'The cool pixel animations on omarchy.org. (needs page refresh)')),
+          }))),
       h('div', { className: 'omapixel-setting' },
+        h('div', { className: 'omapixel-line' },
+          h('span', { className: 'omapixel-legend' }, 'Headline:'),
+          h('span', { className: 'omapixel-note' },
+            'Types omarchy.org\'s headline rotation: loop forever or just play once.')),
         h('div', { className: 'omapixel-row' },
-          h('span', { className: 'omapixel-legend' }, 'Headline'),
           TYPE_MODES.map(function (mode) {
             return h('button', {
               key: mode,
@@ -1146,9 +1151,7 @@ function applyFeature(host) {
               'data-on': state.typing === mode ? '1' : '0',
               onClick: function () { setTypingMode(mode) },
             }, TYPE_LABELS[mode])
-          })),
-        h('div', { className: 'omapixel-note' },
-          'Types omarchy.org\'s headline rotation: loop forever or just play once.')))
+          }))))
   }
 
   ctx.effect(function () {
