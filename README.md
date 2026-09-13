@@ -17,6 +17,7 @@ Two things live here:
 | Research (`themes.md`) | Complete — 22 themes, canonical + Omarchy-retuned values, DSH token mapping |
 | Plugin: single Tokyo Night toggle | Superseded by the full picker |
 | Plugin: full 22-theme picker | Implemented — `plugins/omaseek.host.js` + `plugins/omaseek.client.js` |
+| Plugin: hero pixel field | Implemented — the site's field behind the New Session hero, switched in Settings → OmaSeek |
 
 ## The plugin
 
@@ -41,6 +42,41 @@ Light / Dark / System chips switch the scheme — and with it, which set you can
 
 The token pairs in `Theme.listTokens` are *not* this mechanism: a pair is one active
 theme's own light and dark values, not two themes.
+
+### The hero pixel field
+
+The New Session hero sits in the omarchy.org hero's field: a lattice of square cells whose
+resting luminance comes from a drifting value-noise blob, dithered down to those cells with
+the same 8×8 Bayer matrix the site uses, lit further by the cursor, and stamped by a press
+with the Omarchy mark growing out of the click point and dissolving back through the dither.
+Ported from `references/omarchy-site/src/components/HeroPixelField.tsx`.
+
+Three pieces of the site's hero are deliberately left behind. The wordmark reveal is
+`src/lib/etch.ts` — `ttfx`, a WASM terminal engine the site loads as `/ttfx/0.3.2/ttfx.js`
+plus `effects/all.wasm` — and there is no Omarchy wordmark here to reveal; the same goes for
+the music spectrum, whose audio graph lives in OmaMusic, and for the wandering sprite that
+stamps the site's field while nobody is looking: this field answers the user and nothing
+else.
+
+**Where it is mounted.** There is no backdrop Slot on the hero — `conversation.hero.*` only
+offers the brand mark, the workspace picker and the agent-preset control — so the canvas is
+a `z-index:-1` child of the conversation root while that root is in its `hero` phase, found
+through `[data-phase="hero"]`. A `z-index:-1` child paints above the panel's own background
+and below everything the harness draws, and the host is given `isolation:isolate` because
+without a stacking context of its own the negative cell lands behind that background
+instead. No product element is restacked and no Slot is replaced; a `MutationObserver` on
+`data-phase` remounts the field as the hero arrives with the route and leaves with the first
+message.
+
+**How big it is.** The cells fill a band, not the panel: the composer column
+(`--dsw-composer-card-max-width`, centred on the composer seat) from three cells above the
+headline to three below the input card. The radial ramp keeps the middle clear of pixels,
+the same way the site keeps them off its wordmark, so the field reads as a frame around the
+hero copy.
+
+**Switching it.** Settings → OmaSeek has a **Pixel field** row: `Off` runs nothing, `Ambient`
+is the drifting lattice alone, and `Interactive` adds the cursor glow and the press stamp. It is not
+persisted, like every other OmaSeek preference — dynamic Packages do not survive the process.
 
 ### Verifying
 
