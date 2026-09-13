@@ -7,7 +7,8 @@
   "author": "claudejaune (https://github.com/claudejaune)",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/claudejaune/OmaSeek.git"
+    "url": "git+https://github.com/claudejaune/OmaSeek.git",
+    "directory": "packages/omaseek-music"
   },
   "main": "./src/host.js",
   "exports": {
@@ -16,10 +17,11 @@
     "./package.json": "./package.json"
   },
   "files": [
-    "src",
-    "lib/client.js",
+    "README.md",
+    "art",
     "cordis.patch.yml",
-    "art"
+    "lib/client.js",
+    "src"
   ],
   "scripts": {
     "build": "node ../../build/bundle-client.mjs .",
@@ -32,5 +34,8 @@
     "client": {
       "platform": "web"
     }
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
