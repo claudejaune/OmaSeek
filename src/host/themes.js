@@ -13,8 +13,8 @@
  * use it when the host carries one and fall back to the Node builtin read
  * when it does not.
  */
-import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
+import { readText } from './files.js'
 
 /** The research doc, located beside the package rather than at a fixed path. */
 const DOC_URL = new URL('../../themes.md', import.meta.url)
@@ -109,52 +109,60 @@ function parseThemes(text) {
     if (m === null) continue
     entries.push({ order: Number(m[1]), id: m[2], name: m[3], scheme: m[4] })
   }
-  if (entries.length !== 22) throw new Error('expected 22 themes in \u00a72, found ' + entries.length)
+  // The doc is the source of truth, so a 23rd theme belongs in the picker the
+  // moment it is written down; the count is not the contract, the tables are.
+  if (entries.length === 0) throw new Error('no themes found in \u00a72 of the research doc')
   entries.sort(function (a, b) { return a.order - b.order })
 
   var native = table(lines, '### 7.2', 1, '--dsw-')
   var ui = table(lines, '### 4.1', 2, '')
   var fields = table(lines, '### 5.2', 1, 'Text input field')
 
-  return entries.map(function (entry) {
-    var palette = {}
-    for (var t = 0; t < NATIVE_ROWS.length; t += 1) {
-      var name = NATIVE_ROWS[t][0]
-      var row = Object.prototype.hasOwnProperty.call(native, name) ? native[name] : undefined
-      if (row === undefined) throw new Error('\u00a77.2 row missing: ' + name)
-      palette[NATIVE_ROWS[t][1]] = row[entry.name]
-    }
-    palette.textMuted = pick(ui, 'Muted text')[entry.name]
-    palette.brandInk = pick(ui, 'On-brand text')[entry.name]
-    palette.fieldBg = pick(fields, 'Text input field')[entry.name]
-    for (var k = 0; k < KEYS.length; k += 1) {
-      var value = palette[KEYS[k]]
-      if (typeof value !== 'string' || value.length === 0) {
-        throw new Error('empty palette value for ' + entry.id + '/' + KEYS[k])
-      }
-    }
-    return { id: entry.id, name: entry.name, scheme: entry.scheme, palette: palette }
-  })
-}
-
-/**
- * Read the doc through whichever seam this host offers. We ask for the `fs`
- * Service first because a host that mounts one may serve the doc from a
- * sandbox the Node builtin cannot see; its failure is not fatal, since the
- * builtin can always read the file sitting next to this module.
- */
-async function readDoc(ctx) {
-  const fileSystem = ctx.get('fs')
-  if (fileSystem !== undefined) {
+  // One theme whose column drifted is one theme short, not an empty picker:
+  // the rest are served and the casualties are reported.
+  var themes = []
+  var skipped = []
+  for (var e = 0; e < entries.length; e += 1) {
+    var entry = entries[e]
     try {
-      const target = await fileSystem.resolve(DOC_PATH)
-      return await fileSystem.readText(target)
+      themes.push(buildTheme(entry, native, ui, fields))
     } catch (error) {
-      // A service scoped to a workspace may refuse the package directory;
-      // fall through rather than fail the request.
+      skipped.push(entry.id + ' (' + String((error && error.message) || error) + ')')
     }
   }
-  return await readFile(DOC_URL, 'utf8')
+  if (themes.length === 0) {
+    throw new Error('no theme could be read from the research doc — ' + skipped.join('; '))
+  }
+  if (skipped.length > 0) {
+    console.warn('omaseek: ' + skipped.length + ' theme(s) skipped — ' + skipped.join('; '))
+  }
+  return themes
+}
+
+/** One §2 entry joined against the §7.2 / §4.1 / §5.2 tables. */
+function buildTheme(entry, native, ui, fields) {
+  var palette = {}
+  for (var t = 0; t < NATIVE_ROWS.length; t += 1) {
+    var name = NATIVE_ROWS[t][0]
+    var row = Object.prototype.hasOwnProperty.call(native, name) ? native[name] : undefined
+    if (row === undefined) throw new Error('\u00a77.2 row missing: ' + name)
+    palette[NATIVE_ROWS[t][1]] = row[entry.name]
+  }
+  palette.textMuted = pick(ui, 'Muted text')[entry.name]
+  palette.brandInk = pick(ui, 'On-brand text')[entry.name]
+  palette.fieldBg = pick(fields, 'Text input field')[entry.name]
+  for (var k = 0; k < KEYS.length; k += 1) {
+    var value = palette[KEYS[k]]
+    if (typeof value !== 'string' || value.length === 0) {
+      throw new Error('empty palette value for ' + entry.id + '/' + KEYS[k])
+    }
+  }
+  return { id: entry.id, name: entry.name, scheme: entry.scheme, palette: palette }
+}
+
+/** Read the research doc through whichever seam this host offers. */
+async function readDoc(ctx) {
+  return await readText(ctx, DOC_PATH)
 }
 
 /**
@@ -175,10 +183,19 @@ export function registerThemeRoutes(host) {
         methods: ['GET'],
         requestBody: 'buffered',
         // Parsed on every request: the doc is the source of truth, so editing
-        // themes.md and reloading the page is all it takes.
+        // themes.md and reloading the page is all it takes. A failure here is
+        // answered, not thrown: an uncaught throw leaves the route as an empty
+        // 400 from the carrier, which reads as a bad request rather than a
+        // broken research doc.
         fetch: async function () {
-          const text = await readDoc(ctx)
-          return Response.json({ path: DOC_PATH, themes: parseThemes(text) })
+          try {
+            const text = await readDoc(ctx)
+            return Response.json({ themes: parseThemes(text) }, { headers: { 'cache-control': 'no-store' } })
+          } catch (error) {
+            const message = String((error && error.message) || error)
+            console.error('omaseek: reading themes.md failed — ' + message)
+            return Response.json({ error: message }, { status: 500 })
+          }
         },
       })
     }, 'omaseek: theme route')

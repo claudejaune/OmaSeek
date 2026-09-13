@@ -21,20 +21,32 @@ export function insertSheet(css, id) {
   const selector = `style[data-omaseek=${JSON.stringify(id)}]`
   const existing = document.querySelector(selector)
   if (existing !== null) {
-    const count = Number(existing.dataset.omaseekUsers || '1') + 1
-    existing.dataset.omaseekUsers = String(count)
-    return function () {
-      const left = Number(existing.dataset.omaseekUsers || '1') - 1
-      if (left > 0) existing.dataset.omaseekUsers = String(left)
-      else existing.remove()
-    }
+    existing.dataset.omaseekUsers = String(Number(existing.dataset.omaseekUsers || '1') + 1)
+    return removerFor(existing)
   }
   const tag = document.createElement('style')
   tag.dataset.omaseek = id
   tag.dataset.omaseekUsers = '1'
   tag.textContent = css
   document.head.appendChild(tag)
-  return function () { tag.remove() }
+  return removerFor(tag)
+}
+
+/**
+ * One remover shape for every owner, first or last: whoever leaves decrements
+ * the count, and the tag goes only when the count reaches zero. (Giving the
+ * first owner a plain `remove()` let a live second owner's sheet vanish under
+ * it — a single duplicate row or a reused id away from a blank section.)
+ */
+function removerFor(tag) {
+  return function () {
+    const left = Number(tag.dataset.omaseekUsers || '1') - 1
+    if (left > 0) {
+      tag.dataset.omaseekUsers = String(left)
+      return
+    }
+    tag.remove()
+  }
 }
 
 /**

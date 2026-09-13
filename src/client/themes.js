@@ -164,8 +164,13 @@ var CSS = [
   // They share the InputBar module's single `primary` class (KFmeWW_primary);
   // the hash-qualified fragment keeps the hit exact in this build — update
   // it if a harness rebuild renames the module.
+  //
+  // The ink falls back to the app background, never to white: `brand-ink` is a
+  // token only these themes define, and the harness's own dark palette paints
+  // brand as near-white — so a white fallback would leave the primary action
+  // invisible for anyone who has not picked an Omarchy palette.
   'button[class*="KFmeWW_primary"]{background:var(--dsw-alias-brand-primary);',
-  'color:var(--dsw-specific-brand-ink,#fff)}',
+  'color:var(--dsw-specific-brand-ink,var(--dsw-alias-bg-base))}',
   'button[class*="KFmeWW_primary"]:hover:not(:disabled){',
   'background:color-mix(in oklch, var(--dsw-alias-brand-primary), white 14%)}',
 ].join('\n')

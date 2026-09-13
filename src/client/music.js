@@ -223,6 +223,10 @@ export function applyFeature(host) {
   var analyser = null
   var running = false
   var objectUrl = ''
+  // Set by the disposer: the 7 MB track can land long after the plugin was
+  // stopped, and a late arrival must not open an audio context or start
+  // playing sound nothing can reach any more.
+  var disposed = false
   var freq = new Float32Array(0)
   var bins = []
   var floorArr = new Float32Array(BANDS)
@@ -360,6 +364,12 @@ export function applyFeature(host) {
     function step() {
       if (offset >= meta.size) {
         objectUrl = URL.createObjectURL(new Blob(parts, { type: 'audio/mpeg' }))
+        // The track finished arriving after the plugin was stopped: hand the
+        // URL straight back rather than leaving it to nothing.
+        if (disposed) {
+          URL.revokeObjectURL(objectUrl)
+          objectUrl = ''
+        }
         return Promise.resolve()
       }
       return fetch('/api/omaseek.music.chunk?offset=' + offset + '&length=' + (1 << 20))
@@ -418,13 +428,23 @@ export function applyFeature(host) {
   function play() {
     touched = true
     if (state === 'playing') return
+    // No meta yet, or none ever: the byte loop needs a size, and a press here
+    // would throw out of the click handler and leave the card on "loading"
+    // forever. Saying so is the honest answer.
+    if (meta === null) {
+      state = 'failed'
+      announce()
+      return
+    }
     state = 'loading'
     announce()
     var ready = audio === null ? fetchTrack() : Promise.resolve()
     ready.then(function () {
+      if (disposed) return
       if (audio === null) wire()
       if (audioContext.state !== 'running') return audioContext.resume()
     }).then(function () {
+      if (disposed) return
       // A cold start picks up where the silent clock got to; a resumed
       // one simply goes on from where it was paused.
       if (audio.currentTime === 0 && duration > 0) audio.currentTime = clockPosition(performance.now())
@@ -465,12 +485,22 @@ export function applyFeature(host) {
     var alive = true
     fetchJson('/api/omaseek.music.meta').then(function (result) {
       if (!alive) return
+      var tl = result.timeline
+      // A host with no track answers 200 with a null timeline rather than
+      // failing the request — the card reports that instead of throwing out
+      // of its own fulfillment handler, which no rejection handler can catch.
+      if (tl === null || tl === undefined) {
+        meta = result
+        state = 'failed'
+        announce()
+        return
+      }
       meta = result
       if (result.icons !== null && result.icons !== undefined
-          && result.icons.play && result.icons.pause) {
+          && result.icons.play && result.icons.pause
+          && Array.isArray(result.icons.play.cells) && Array.isArray(result.icons.pause.cells)) {
         GLYPHS = { play: result.icons.play.cells, pause: result.icons.pause.cells }
       }
-      var tl = result.timeline
       duration = tl.duration
       fps = tl.fps
       tlBands = tl.bands
@@ -484,6 +514,7 @@ export function applyFeature(host) {
     })
     return function () {
       alive = false
+      disposed = true
       if (audio !== null) {
         audio.pause()
         audio.src = ''
@@ -501,6 +532,18 @@ export function applyFeature(host) {
   // The card. Visual port of MusicControl.tsx, plus two things the
   // site does not do: it floats in the shell overlay, and it drags.
   // ---------------------------------------------------------------
+
+  /**
+   * Keep a dragged card inside the window.
+   * A card wider than the window has no valid range at all, so the near margin
+   * wins — the alternative (clamping to a negative upper bound) would drag the
+   * card off-screen and take its controls with it.
+   */
+  function clampToViewport(value, size, extent) {
+    var upper = extent - size - 8
+    if (upper < 8) return 8
+    return Math.min(Math.max(value, 8), upper)
+  }
   function Player() {
     var tick = React.useState(0)
     var bump = function () { tick[1](function (n) { return n + 1 }) }
@@ -513,7 +556,17 @@ export function applyFeature(host) {
     var barsRef = React.useRef([])
     var scrubbing = React.useRef(false)
     var dragMoved = React.useRef(false)
+    var endDrag = React.useRef(null)
     var home = React.useRef(null)
+    // A drag that is still in flight when the card unmounts would leave its
+    // window listeners holding a detached element, and a seek caught mid-drag
+    // would keep the line frozen for the rest of the page's life.
+    React.useEffect(function () {
+      return function () {
+        if (endDrag.current !== null) endDrag.current()
+        scrubbing.current = false
+      }
+    }, [])
     if (home.current === null) {
       home.current = { left: 20, top: window.innerHeight - 66 }
     }
@@ -583,8 +636,8 @@ export function applyFeature(host) {
         dragMoved.current = true
         // The tip is not dragged along; it waits for a settled hover.
         card.setAttribute('data-dragging', '1')
-        var left = Math.min(Math.max(originLeft + dx, 8), window.innerWidth - rect.width - 8)
-        var top = Math.min(Math.max(originTop + dy, 8), window.innerHeight - rect.height - 8)
+        var left = clampToViewport(originLeft + dx, rect.width, window.innerWidth)
+        var top = clampToViewport(originTop + dy, rect.height, window.innerHeight)
         home.current = { left: left, top: top }
         card.style.left = left + 'px'
         card.style.top = top + 'px'
@@ -594,7 +647,12 @@ export function applyFeature(host) {
         window.removeEventListener('pointermove', onMove)
         window.removeEventListener('pointerup', onUp)
         window.removeEventListener('pointercancel', onUp)
+        endDrag.current = null
       }
+      // The card can be wider than the window; the listeners are held so an
+      // unmount mid-drag takes them back out instead of leaving them on
+      // `window` holding a detached card.
+      endDrag.current = onUp
       window.addEventListener('pointermove', onMove)
       window.addEventListener('pointerup', onUp)
       window.addEventListener('pointercancel', onUp)
@@ -667,6 +725,7 @@ export function applyFeature(host) {
         onPointerDown: function () { scrubbing.current = true },
         onPointerUp: function () { scrubbing.current = false },
         onPointerCancel: function () { scrubbing.current = false },
+        onLostPointerCapture: function () { scrubbing.current = false },
         onInput: function (event) { onScrub(Number(event.currentTarget.value)) },
       }))
   }

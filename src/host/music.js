@@ -16,8 +16,8 @@
  * copy sitting next to this module. Either way a missing track is a quiet
  * answer, not a boot failure — the card reports it.
  */
-import { open, readFile, stat } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
+import { fileSize, readBytes, readText } from './files.js'
 
 /** The plugin's own files, shipped beside this module. */
 const MUSIC_DIR = new URL('../../assets/music/', import.meta.url)
@@ -44,69 +44,6 @@ const ICONS_PATH = fileURLToPath(ICONS_URL)
 const CHUNK_MAX = 1 << 20
 
 /**
- * Read one byte range through whichever seam this host offers.
- *
- * The `fs` Service speaks the execution world's paths and access policy, so it
- * is tried first; its refusal is not fatal, because the file sits next to this
- * module and the Node builtin can always reach it.
- * @returns the slice, empty when the host has no such file.
- */
-async function readRange(ctx, path, offset, length) {
-  const fileSystem = ctx.get('fs')
-  if (fileSystem !== undefined) {
-    try {
-      const target = await fileSystem.resolve(path)
-      if (offset === undefined) return await fileSystem.readBytes(target, undefined, length)
-      return await fileSystem.readByteRange(target, { offset, length })
-    } catch (error) {
-      // Fall through to the builtin rather than fail the request.
-    }
-  }
-  const handle = await open(path, 'r')
-  try {
-    const buffer = Buffer.allocUnsafe(length)
-    const read = await handle.read(buffer, 0, length, offset === undefined ? 0 : offset)
-    return new Uint8Array(buffer.buffer, buffer.byteOffset, read.bytesRead)
-  } finally {
-    await handle.close()
-  }
-}
-
-/** Read a small text file, through `fs` when the host has one. */
-async function readText(ctx, path) {
-  const fileSystem = ctx.get('fs')
-  if (fileSystem !== undefined) {
-    try {
-      const target = await fileSystem.resolve(path)
-      return await fileSystem.readText(target)
-    } catch (error) {
-      // Fall through.
-    }
-  }
-  return await readFile(path, 'utf8')
-}
-
-/** The mp3's size, or 0 when the host has no such file. */
-async function trackSize(ctx, path) {
-  const fileSystem = ctx.get('fs')
-  if (fileSystem !== undefined) {
-    try {
-      const target = await fileSystem.resolve(path)
-      const info = await fileSystem.stat(target)
-      if (info !== undefined && typeof info.size === 'number') return info.size
-    } catch (error) {
-      // Fall through.
-    }
-  }
-  try {
-    const info = await stat(path)
-    return info.size
-  } catch (missing) {
-    return 0
-  }
-}
-
-/**
  * Register OmaMusic's routes on the browser connection.
  *
  * Both routes hang off `ctx.inject` rather than a guard: this apply runs while
@@ -124,38 +61,46 @@ export function registerMusicRoutes(host) {
 
 /** One round trip for everything small: what plays, its art, its timeline. */
 function registerMetaRoute(ctx) {
-  /** Settled once per process: the art and timeline are read at most once. */
-  let meta = null
+  /**
+   * The heavy half — art, timeline, transport glyphs — read once, because it is
+   * the shipped assets and cannot change under a running process.
+   *
+   * The size is deliberately *not* cached: it is one `stat` on the request
+   * path, and caching it would let the meta and the chunk route disagree the
+   * moment someone points `OMASEEK_MUSIC_PATH` at a file, or replaces one.
+   * Nothing is cached for a missing track either, so dropping a file in place
+   * is picked up by the next page load instead of needing a plugin reload.
+   */
+  let heavy = null
 
   async function metaOnce() {
-    if (meta !== null) return meta
     const path = trackPath()
-    const size = await trackSize(ctx, path)
+    const size = await fileSize(ctx, path)
     if (size === 0) {
       console.error('omaseek: no music file at ' + path + ' — the card will stay silent')
-      meta = { title: TRACK.title, artist: TRACK.artist, size: 0, art: '', timeline: null, icons: null }
-      return meta
+      return { title: TRACK.title, artist: TRACK.artist, size: 0, art: '', timeline: null, icons: null }
     }
-    const artBytes = await readRange(ctx, ART_PATH, undefined, 1 << 20)
-    const timeline = JSON.parse(await readText(ctx, TIMELINE_PATH))
-    // The transport glyphs travel with the meta. If the file went missing, the
-    // browser half keeps its inlined copy of the same cells.
-    let icons = null
-    try {
-      icons = JSON.parse(await readText(ctx, ICONS_PATH))
-    } catch (missing) {
-      console.error('omaseek: transport icons not found, using inlined cells')
+    if (heavy === null) {
+      const artBytes = await readBytes(ctx, ART_PATH, undefined, 1 << 20)
+      const timeline = JSON.parse(await readText(ctx, TIMELINE_PATH))
+      // The transport glyphs travel with the meta. If the file went missing,
+      // the browser half keeps its inlined copy of the same cells.
+      let icons = null
+      try {
+        icons = JSON.parse(await readText(ctx, ICONS_PATH))
+      } catch (missing) {
+        console.error('omaseek: transport icons not found, using inlined cells')
+      }
+      heavy = {
+        title: TRACK.title,
+        artist: TRACK.artist,
+        art: 'data:image/webp;base64,' + Buffer.from(artBytes).toString('base64'),
+        timeline: timeline,
+        icons: icons,
+      }
+      console.log('omaseek: serving "' + TRACK.title + '"')
     }
-    meta = {
-      title: TRACK.title,
-      artist: TRACK.artist,
-      size: size,
-      art: 'data:image/webp;base64,' + Buffer.from(artBytes).toString('base64'),
-      timeline: timeline,
-      icons: icons,
-    }
-    console.log('omaseek: serving "' + TRACK.title + '", ' + meta.size + ' bytes of mp3')
-    return meta
+    return Object.assign({}, heavy, { size: size })
   }
 
   ctx.effect(function () {
@@ -185,14 +130,22 @@ function registerChunkRoute(ctx) {
       requestBody: 'buffered',
       fetch: async function (request) {
         const query = new URL(request.url).searchParams
-        const offset = Number(query.get('offset'))
-        let length = Number(query.get('length'))
-        if (!Number.isInteger(offset) || offset < 0) {
+        // A missing or blank parameter is a malformed request, not offset 0:
+        // `Number(null)` is 0, which would answer the first megabyte of the
+        // track to a request that never asked for a window.
+        const rawOffset = query.get('offset')
+        const rawLength = query.get('length')
+        const offset = Number(rawOffset)
+        if (rawOffset === null || rawOffset.trim() === '' || !Number.isInteger(offset) || offset < 0) {
           return Response.json({ error: 'bad chunk offset' }, { status: 400 })
         }
-        if (!Number.isInteger(length) || length <= 0 || length > CHUNK_MAX) length = CHUNK_MAX
+        let length = Number(rawLength)
+        if (rawLength === null || rawLength.trim() === ''
+            || !Number.isInteger(length) || length <= 0 || length > CHUNK_MAX) {
+          length = CHUNK_MAX
+        }
         try {
-          const bytes = await readRange(ctx, trackPath(), offset, length)
+          const bytes = await readBytes(ctx, trackPath(), offset, length)
           return new Response(bytes, {
             headers: { 'content-type': 'audio/mpeg', 'content-length': String(bytes.length) },
           })

@@ -628,10 +628,13 @@ function mountField(host, live) {
   // charge rather than firing it.
   function onCancel() { holding = null }
 
-  if (measure()) {
-    if (reduced) draw(0)
-    else frame = requestAnimationFrame(loop)
-  }
+  // A host with no box yet (mounted before layout) cannot be measured, but the
+  // loop still starts: it no-ops on a zero-size canvas and picks the field up
+  // as soon as the panel has one, where waiting for a resize would leave a
+  // single frozen frame.
+  measure()
+  if (reduced) draw(0)
+  else frame = requestAnimationFrame(loop)
 
   var observers = []
   if (typeof ResizeObserver !== 'undefined') {
@@ -770,14 +773,19 @@ function mountTyper(el, phrases, reduced) {
     timer = window.setTimeout(step, next)
   }
 
-  // Measure against the real webfont, or the reservation is a fallback's.
+  // Measure against the real webfont, or the reservation is a fallback's. The
+  // font load can settle after the typer was stopped — a mode switch or a hero
+  // remount — and re-reserving then would rewrite the product's own hero block
+  // from under the next mount, so the callback checks a flag the disposer flips.
+  var stopped = false
   reserve()
   if (document.fonts !== undefined && document.fonts.ready !== undefined) {
-    document.fonts.ready.then(function () { reserve() })
+    document.fonts.ready.then(function () { if (!stopped) reserve() })
   }
   step()
 
   return function () {
+    stopped = true
     window.clearTimeout(timer)
     restore()
   }
@@ -824,8 +832,10 @@ export function applyFeature(host) {
   var slots = ctx.get('slots')
   if (slots === undefined) return
 
-  // Transient like every OmaSeek preference: dynamic Packages do not
-  // survive the process, so nothing here outlives the run.
+  // In-memory and per page load: the section's two choices are switches, not
+  // settings, so nothing here is written anywhere or outlives a reload. (The
+  // package could persist them, but a hero field that comes back off after a
+  // reload would be the surprise, not the feature.)
   var state = { field: 'interactive', typing: 'loop' }
   var subs = []
   function notify() {
@@ -917,11 +927,21 @@ export function applyFeature(host) {
     // so the field follows the DOM rather than a list of lifecycle hooks.
     // Mutations are coalesced into one check per frame.
     var queued = false
+    var pending = 0
+    var live = true
     function check() {
       if (queued) return
       queued = true
       if (typeof requestAnimationFrame !== 'function') { queued = false; syncField(); syncTyper(); return }
-      requestAnimationFrame(function () { queued = false; syncField(); syncTyper() })
+      pending = requestAnimationFrame(function () {
+        queued = false
+        // Effects dispose in reverse order, so this callback can still be in
+        // flight after the teardown effect released the field: running it then
+        // would mount a second canvas and its listeners on a stopped plugin.
+        if (!live) return
+        syncField()
+        syncTyper()
+      })
     }
     var watcher = null
     if (typeof MutationObserver !== 'undefined') {
@@ -931,7 +951,11 @@ export function applyFeature(host) {
       })
     }
     check()
-    return function () { if (watcher !== null) watcher.disconnect() }
+    return function () {
+      live = false
+      if (pending !== 0) cancelAnimationFrame(pending)
+      if (watcher !== null) watcher.disconnect()
+    }
   }, 'omapixel: hero field')
 
   ctx.effect(function () {
