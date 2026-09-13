@@ -9,8 +9,8 @@ Three features, one install:
   scheme-aware picker in **Settings → OmaSeek** and the Omarchy corner radii.
 - **OmaPixel** — the New Session hero's headline typewriter and the omarchy.org pixel field
   behind it. **Settings → OmaPixel**: field Off/Ambient/Interactive, headline Loop/Once.
-- **OmaMusic** — the site's now-playing card, over a track you point it at. **Settings →
-  OmaMusic**.
+- **OmaMusic** — the site's now-playing card, over a track you point it at. It has no settings
+  page of its own: the card sits in the corner, and `OMASEEK_MUSIC_PATH` decides what plays.
 
 `themes.md` in this repo is the research behind the palettes — every color of every theme,
 plus how each one maps onto a harness theme token. It is the **source of truth**: the Node
