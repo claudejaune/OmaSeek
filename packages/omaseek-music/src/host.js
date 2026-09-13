@@ -61,7 +61,8 @@ function timelinePath() {
 const CHUNK_MAX = 1 << 20
 
 /**
- * Register OmaMusic's routes on the browser connection.
+ * The plugin's entry point: register this package's routes on the browser
+ * connection.
  *
  * Both routes hang off `ctx.inject` rather than a guard: this apply runs while
  * the composition is still assembling, so `ctx.get('connection')` at that
@@ -69,7 +70,7 @@ const CHUNK_MAX = 1 << 20
  * injected scope attaches them when a connection exists and disposes with the
  * fiber; a host with no browser half never runs the callback at all.
  */
-export function registerMusicRoutes(host) {
+export function apply(host) {
   host.inject(['connection'], function (ctx) {
     registerMetaRoute(ctx)
     registerChunkRoute(ctx)

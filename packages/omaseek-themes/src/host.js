@@ -166,7 +166,8 @@ async function readDoc(ctx) {
 }
 
 /**
- * Register this package's theme route on the browser connection.
+ * The plugin's entry point: register this package's theme route on the browser
+ * connection.
  *
  * The registration hangs off `ctx.inject` rather than a guard: this apply runs
  * while the composition is still assembling, so `ctx.get('connection')` at that
@@ -175,7 +176,7 @@ async function readDoc(ctx) {
  * replaced, and disposes with the fiber. A host with no browser half — headless,
  * TUI — never runs the callback, which is exactly the silent load it wants.
  */
-export function registerThemeRoutes(host) {
+export function apply(host) {
   host.inject(['connection'], function (ctx) {
     ctx.effect(function () {
       return ctx.connection.fetch.register({

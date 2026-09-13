@@ -13,7 +13,8 @@
   "scripts": {
     "build": "pnpm -r build",
     "smoke": "node build/smoke-client.mjs",
-    "check": "pnpm build && pnpm smoke",
-    "publish:all": "pnpm -r publish --access public"
+    "check": "pnpm build && node build/check-hosts.mjs && pnpm smoke",
+    "publish:all": "pnpm -r publish --access public",
+    "hosts": "node build/check-hosts.mjs"
   }
 }
