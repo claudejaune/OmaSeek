@@ -8,6 +8,8 @@ Three plugins:
 2. **Pixel**: The cool pixel animations on [omarchy.org](https://omarchy.org/)
 3. **Music**: Streams **We Can Fix Everything** by Kevin Koontz (more coming soon!)
 
+https://github.com/user-attachments/assets/00b55a6a-9f12-4df9-be09-c113dfd9fb79
+
 ## Quick start
 
 ### `npx` users
