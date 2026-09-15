@@ -230,6 +230,16 @@ const PACKAGES = [
       { label: 'light scheme, nothing chosen', scheme: 'light', applied: 'omarchy-catppuccin-latte', themes: 4 },
       { label: 'a remembered choice', scheme: 'dark', stored: { dark: 'omarchy-tokyo-night' }, applied: 'omarchy-tokyo-night', themes: 4 },
       { label: 'a remembered opt-out', scheme: 'dark', stored: { dark: 'base' }, applied: null, themes: 4 },
+      // A settings write anywhere in the harness — picking a model writes the
+      // default-model section — re-publishes the settings mirror, and ui-theme
+      // adopts its durable preference over the picked palette. The palette has
+      // to come back, and it has to come back LAST: the presenter is handed
+      // snapshots in registration order, so the final one is what `body` shows.
+      {
+        label: 'a settings write resets the scheme, and the palette comes back',
+        scheme: 'dark', stored: { dark: 'omarchy-tokyo-night' }, applied: 'omarchy-tokyo-night',
+        settingsWrite: true, themes: 4,
+      },
     ],
   },
   {
@@ -262,13 +272,53 @@ const PACKAGES = [
 function makeServices() {
   const calls = { registered: [], sections: [], overlays: [], themeRegistrations: [], disposers: [], themeSet: [] }
 
-  const themeService = {
-    register(definition) { calls.themeRegistrations.push(definition); return () => {} },
-    getTheme() {
-      return { active: { id: 'dark', colorScheme: calls.scheme }, preference: 'system' }
-    },
-    setTheme(id) { calls.themeSet.push(id) },
+  // The theme Service publishes the way the real one does: `setTheme()` settles
+  // the active theme and synchronously hands the new snapshot to every listener
+  // in registration order. That order is where the reset bug lives — a listener
+  // registered after the feature's is handed the stale outer snapshot last, and
+  // that is the one that gets painted — so a stub that only recorded the id
+  // could never see it.
+  const listeners = []
+  const schemeOf = new Map()
+  let preference = 'system'
+  let activeId = 'dark'
+  const snapshot = () => ({
+    preference,
+    active: { id: activeId, colorScheme: schemeOf.get(activeId) || calls.scheme },
+    themes: [],
+  })
+  // One snapshot object per publication, handed to every listener in turn — the
+  // real Service builds it once, so a listener that changes the active theme
+  // mid-dispatch does not rewrite what the listeners after it receive.
+  const publish = () => {
+    const next = snapshot()
+    for (const listener of [...listeners]) listener(next)
   }
+
+  const themeService = {
+    register(definition) {
+      calls.themeRegistrations.push(definition)
+      schemeOf.set(definition.id, definition.colorScheme)
+      return () => { schemeOf.delete(definition.id) }
+    },
+    getTheme() { return snapshot() },
+    setTheme(id) {
+      calls.themeSet.push(id)
+      preference = id
+      activeId = id
+      publish()
+    },
+  }
+
+  /** What ui-theme's `adopt()` does when any settings write re-publishes the scope. */
+  const adoptDurable = () => {
+    preference = calls.scheme
+    activeId = calls.scheme
+    publish()
+  }
+
+  /** Take a listener last, the way ui-layout's token presenter does. */
+  const observeLast = (fn) => { listeners.push(fn) }
 
   // The real registry runs a contribution's callback only once its slot is
   // declared, and throws when `register` is called outside that callback. The
@@ -308,9 +358,16 @@ function makeServices() {
       const off = fn()
       if (typeof off === 'function') calls.disposers.push(off)
     },
-    on() { return () => {} },
+    on(name, listener) {
+      if (name !== 'theme/change') return () => {}
+      listeners.push(listener)
+      return () => {
+        const at = listeners.indexOf(listener)
+        if (at >= 0) listeners.splice(at, 1)
+      }
+    },
   }
-  return { calls, ctx }
+  return { calls, ctx, adoptDurable, observeLast }
 }
 
 function jsonResponse(value) {
@@ -369,7 +426,7 @@ function textsOf(component) {
 }
 
 async function runCase(pkg, testCase) {
-  const { calls, ctx } = makeServices()
+  const { calls, ctx, adoptDurable, observeLast } = makeServices()
   calls.scheme = testCase.scheme === undefined ? 'dark' : testCase.scheme
   store.clear()
   for (const [scheme, id] of Object.entries(testCase.stored === undefined ? {} : testCase.stored)) {
@@ -430,6 +487,21 @@ async function runCase(pkg, testCase) {
       if (applied.length > 0) problems.push(`applied ${applied.join(', ')} where none was expected`)
     } else if (!applied.includes(testCase.applied)) {
       problems.push(`applied ${applied.length === 0 ? 'nothing' : applied.join(', ')}; expected ${testCase.applied}`)
+    }
+  }
+
+  // The reset this Plugin exists to survive: ui-theme re-adopts its durable
+  // preference because some other settings section was written, and every
+  // listener hears that snapshot. Whoever is handed the LAST one is what `body`
+  // ends up showing, so a repair that lands inside the dispatch loses.
+  if (testCase.settingsWrite === true) {
+    const painted = []
+    observeLast((snapshot) => { painted.push(snapshot.active.id) })
+    adoptDurable()
+    await new Promise((done) => setTimeout(done, 5))
+    const last = painted[painted.length - 1]
+    if (last !== testCase.applied) {
+      problems.push(`a settings write left "${last}" painted, expected "${testCase.applied}"`)
     }
   }
 

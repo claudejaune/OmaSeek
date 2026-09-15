@@ -244,6 +244,38 @@ export function applyFeature(host) {
     }
   }
 
+  /**
+   * Repair the palette after the dispatch that reset it, never inside it.
+   *
+   * Writing *any* settings section republishes the settings mirror — picking a
+   * model writes `agent-default-model` — and ui-theme answers by adopting the
+   * durable `light`/`dark`/`system` preference over whatever this Package had
+   * put in force, which is a reset this Plugin has to survive. `setTheme`
+   * publishes synchronously, so repairing from inside the listener below emits
+   * a nested snapshot while the outer dispatch is still being delivered, and a
+   * listener registered after this one — ui-layout's token presenter among
+   * them — is handed that outer, resetting snapshot last and paints it. The
+   * Service still holds the wanted id by then, so `applyForScheme` returns
+   * early from that moment on and nothing ever repaints: Settings reads the
+   * Omarchy theme while the app wears the harness palette, until the reader
+   * clicks a card.
+   *
+   * One microtask is all it takes to be last. It runs after the whole dispatch
+   * has settled and before the browser paints, so the repair is final and
+   * invisible, and the flag folds the several publications one settings write
+   * produces into a single repair.
+   */
+  var repairPending = false
+  var stopped = false
+  function repair() {
+    if (repairPending || stopped) return
+    repairPending = true
+    Promise.resolve().then(function () {
+      repairPending = false
+      if (!stopped) applyForScheme()
+    })
+  }
+
   // Corner shape lives outside the Settings page: it restyles the whole
   // harness, so it stays applied after the page closes. One owned sheet,
   // swapped rather than stacked.
@@ -309,7 +341,13 @@ export function applyFeature(host) {
   ctx.effect(function () {
     // Light and dark each remember a palette, so the scheme decides which one
     // is in force — a click on Light is not a request to forget the dark pick.
-    return ctx.on('theme/change', function () { applyForScheme() })
+    // Deferred, because re-applying inside the change it answers loses: see
+    // `repair`.
+    var off = ctx.on('theme/change', function () { repair() })
+    return function () {
+      stopped = true
+      off()
+    }
   }, 'omaseek: scheme palette')
 
   /** One theme card: a miniature of the palette, painted with its own tokens. */

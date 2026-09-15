@@ -24,6 +24,15 @@ forgotten on every reload. The picker keeps its own note in `localStorage` under
 `omaseek.themes`, one slot per scheme. Clearing site data, or pressing **System**, returns
 both schemes to automatic.
 
+**And it survives a settings write.** Writing *any* settings section — picking a model writes
+the default-model one — republishes the settings mirror, and the harness answers by adopting
+its durable `light`/`dark`/`system` preference over the picked palette. The picker puts its
+palette back on the next microtask rather than in the change it is answering: a listener
+registered after the picker's (ui-layout's token presenter, which is what paints `body`) is
+handed the resetting snapshot last, so a repair made during the dispatch is exactly what gets
+painted over — and with the Service already holding the wanted id, the picker would never
+repair again.
+
 **Opting out is a click.** The **Light** and **Dark** chips are the harness's own palettes,
 and choosing one for a scheme also tells the picker to stop painting over it — otherwise the
 automatic Catppuccin would come straight back on the next scheme change.
