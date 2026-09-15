@@ -77,11 +77,13 @@ var CSS = [
   'background:color-mix(in srgb, var(--dsw-alias-bg-base) 85%, transparent);',
   'backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);',
   'pointer-events:auto;touch-action:none;user-select:none;cursor:move}',
-  '.omamusic-row{display:flex;height:46px;align-items:stretch;position:relative}',
+  // The 2px under the row is the clearance the progress line wants above the
+  // transport's top border; the line itself sits on the row's foot.
+  '.omamusic-row{display:flex;height:46px;align-items:stretch;position:relative;margin-bottom:2px}',
   '.omamusic button,.omamusic input{cursor:pointer}',
   // Art button: the cover, a veil with the volume glyph, a brand ring
   // pulsing until the sound has been touched.
-  '.omamusic-art{position:relative;width:44px;height:44px;flex:none;align-self:center;padding:0;',
+  '.omamusic-art{position:relative;width:40px;height:40px;flex:none;align-self:flex-start;padding:0;',
   'border:none;border-right:1px solid var(--dsw-alias-border-l1);background:#000 center/cover no-repeat}',
   '.omamusic-ring{position:absolute;inset:-1px;pointer-events:none;border:1px solid var(--dsw-alias-brand-primary);',
   'animation:omamusic-ring 1.8s ease-in-out infinite}',
