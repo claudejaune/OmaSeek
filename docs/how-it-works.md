@@ -117,6 +117,38 @@ sounds, because a press on next that played nothing would be a control that does
 track that fails while the card was the one choosing it is walked past once; past that, a
 station that is down simply fails rather than running the whole list past the listener.
 
+**The line along the foot is a seek bar, and pressing it anywhere seeks there.** A range input
+answers a drag and the arrow keys but not a press on its own track, so the position is worked
+out from the element's box and handed to the same handler. Hovering it swaps the artist for
+`1:23 / 5:44`, the way the older card did — and the card sets that swap itself rather than
+leaving it to a `:has()` selector, which it cannot read back and which fails silently where it
+is not supported.
+
+**The title and artist are also in a tooltip**, the whole of both, after a settle of hover rather
+than immediately, and it gets out of the way the moment the card is dragged — the same behaviour
+the card has always had, kept deliberately.
+
+The songs the station labels **explicit** wear an `E` between the byline and the meter.
+
+The card is **one fixed width** whatever is playing, with the title the only thing that gives,
+by ellipsis. That was not always so: sized to its content, it took the width of the longest
+title in the station, which left every other song with a column of empty space. The queue
+counter has a box of its own for the same reason — `9/33` and `10/33` are different widths, and
+everything to their right moved when the number gained a digit.
+
+### When it cannot play
+
+Whatever went wrong is named on the card. Not "the station could not be loaded" — the reason the
+fetch gave, which is the difference between a card that looks broken and a card that says
+`responded 500` and can be acted on. No network, a station that is not there, a station with
+nothing to play: each says which it was, and the play button stays live so a press tries again
+once the network is back.
+
+A quiet one worth knowing about: a play the browser abandons — `interrupted by a call to
+pause()`, which is what a second press does — arrives as a rejected promise from `play()` and is
+not a failure at all. Read as one, it leaves the card failed with nothing to say and no way to
+start it again. Each start carries a number and only the newest may report anything.
+
 ### One picture, for every song
 
 The card wears the Omarchy mark, and every song wears the same one. That is a decision, not a
@@ -128,11 +160,13 @@ of the card's artwork.
 It is not per-song art that is the exception — it is art at all. A song submitted next month with
 a beautiful cover of its own will wear the mark like the rest.
 
+The mark is 40px and sits at the top of its row, which leaves 4px of clearance before the
+progress line at the row's foot and 2px between that line and the transport. Those numbers are
+not decoration: the artwork and the line were a single pixel apart before, which read as one
+shape rather than two.
+
 A stream needs the host to allow cross-origin reads for the meter; if it does not, the card
-retries without CORS, plays the sound, and leaves the meter flat. Everything else that can go
-wrong is said on the card rather than thrown: no network, an unreachable station, a song that is
-not there, or nothing configured at all. The play button stays live, so it can be pressed again
-once the network is back.
+retries without CORS, plays the sound, and leaves the meter flat.
 
 `packages/omaseek-music/assets/music/` in this checkout keeps a local copy of a track for
 development, untracked.
