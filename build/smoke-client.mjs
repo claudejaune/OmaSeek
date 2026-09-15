@@ -124,6 +124,8 @@ const windowStub = {
 
 /** What the stubbed media element does when asked to play. */
 let audioMode = 'ok'
+/** The element the card is driving, so a case can end a song on it. */
+let lastAudio = null
 
 /**
  * A media element that reports back the way a real one does: metadata, then
@@ -137,6 +139,7 @@ class FakeAudio {
     this.currentTime = 0
     this.duration = 0
     this.paused = true
+    lastAudio = this
   }
   addEventListener(type, fn) { (this.listeners[type] = this.listeners[type] || []).push(fn) }
   removeEventListener() {}
@@ -208,14 +211,42 @@ const THEMES = {
 
 const TIMELINE = { duration: 210, fps: 30, bands: 48, spectrum: Buffer.from([1, 2, 3]).toString('base64') }
 
-const WITH_TRACK = { title: 'T', artist: 'A', size: 4096, art: '', timeline: TIMELINE, icons: null }
-const NO_TRACK = { title: 'T', artist: 'A', size: 0, art: '', timeline: null, icons: null }
-const NO_TIMELINE = { title: 'T', artist: 'A', size: 4096, art: '', timeline: null, icons: null }
-/** Streamed from the station: a URL, no bytes of ours, no analysis to match. */
-const STREAMED = {
-  title: 'T', artist: 'A', url: 'https://radio.example/track.mp3',
-  size: 0, art: 'data:image/webp;base64,AA==', timeline: null, icons: null,
+
+/**
+ * The station, as the Node half resolves it: every track with the address its
+ * bytes are at and the art this package holds for it. Two songs is the
+ * smallest list that can be walked, which is what next and prev are read
+ * against — one track has nothing to be next to.
+ */
+const STATION = {
+  station: 'omarchy',
+  name: 'Omarchy',
+  tracks: [
+    {
+      title: 'First Song', artist: 'Someone', file: 'first-song.mp3',
+      url: 'https://radio.example/tracks/first-song.mp3', art: 'data:image/png;base64,AA==',
+      explicit: false, size: 0, timeline: null,
+    },
+    {
+      title: 'Second Song', artist: 'Someone Else', file: 'second-song.mp3',
+      url: 'https://radio.example/tracks/second-song.mp3', art: 'data:image/png;base64,AA==',
+      explicit: true, size: 0, timeline: null,
+    },
+  ],
 }
+
+/** A lone song streamed from somewhere: a card pointed at one URL by hand. */
+const LONE = {
+  station: 'omarchy', name: 'Omarchy',
+  tracks: [{
+    title: 'Only Song', artist: 'Someone', file: 'only.mp3',
+    url: 'https://radio.example/tracks/only.mp3', art: '', explicit: false,
+    size: 0, timeline: null,
+  }],
+}
+
+/** A station that answered and had nothing to play. */
+const EMPTY = { station: 'omarchy', name: 'Omarchy', tracks: [] }
 
 /* ── the three packages, and what each must do alone ───────────────────── */
 
@@ -255,13 +286,55 @@ const PACKAGES = [
     label: 'OmaMusic (card)',
     expect: { sections: [], overlays: 1, themes: 0 },
     cases: [
-      { label: 'streamed from the station', meta: STREAMED, expectFailure: null },
-      { label: 'streamed, and the station cannot be reached', meta: STREAMED, play: true, audio: 'error', expectFailure: 'The track could not be reached' },
-      { label: 'streamed, and it plays', meta: STREAMED, play: true, audio: 'ok', expectFailure: null },
-      { label: 'a local file with its timeline', meta: WITH_TRACK, play: true, audio: 'ok', expectFailure: null },
-      { label: 'no track at all', meta: NO_TRACK, play: true, expectFailure: 'No track is set' },
-      { label: 'a local file with no analysis', meta: NO_TIMELINE, play: true, audio: 'ok', expectFailure: null },
-      { label: 'a route that fails', meta: null, play: true, expectFailure: 'The track could not be loaded' },
+      { label: 'the station, 2 songs listed', tracks: STATION, expectFailure: null, expectTrack: 'First Song' },
+      { label: 'the station, and it plays', tracks: STATION, play: true, audio: 'ok', expectFailure: null, expectTrack: 'First Song' },
+      {
+        label: 'next walks the station', tracks: STATION, play: true, audio: 'ok',
+        expectFailure: null, click: 'Next track', expectTrack: 'Second Song',
+      },
+      {
+        // The station labels the songs that swear and the card has to say so.
+        // The second song in the fixture is the labelled one.
+        label: 'the labelled song wears its badge', tracks: STATION,
+        click: 'Next track', expectTrack: 'Second Song', expectText: 'E',
+      },
+      {
+        // Press back from the top of the list: the station wraps to its last
+        // song, the way the deck's own playlist does. Nothing is pressed to
+        // play here, so what is on the card is the track, with no failure over
+        // it. (A second press would land back on the first, which is the same
+        // wrap read from the other side — one press is the interesting half.)
+        label: 'prev walks back past the top and wraps', tracks: STATION,
+        expectFailure: null, click: 'Previous track', clicks: 1, expectTrack: 'Second Song',
+      },
+      {
+        label: 'a song ending plays the next one', tracks: STATION, play: true, audio: 'ok',
+        expectFailure: null, end: true, expectTrack: 'Second Song',
+      },
+      {
+        label: 'the station is not there', tracks: null, play: true,
+        expectFailure: 'The station could not be loaded',
+      },
+      {
+        label: 'the station is there and the song is not', tracks: STATION, play: true, audio: 'error',
+        expectFailure: 'The track could not be reached', expectTrack: 'First Song',
+      },
+      {
+        // A station of one: nothing to walk on to, and the card knows it.
+        label: 'a station with a single song', tracks: LONE, play: true, audio: 'ok',
+        expectFailure: null, expectTrack: 'Only Song',
+      },
+      {
+        // The station answered and had nothing in it.
+        label: 'nothing to play', tracks: EMPTY, play: true,
+        expectFailure: 'No track is set',
+      },
+      {
+        // A host with no catalogue route at all — an older build — leaves the
+        // card with nothing to play, and it says so rather than failing oddly.
+        label: 'a host with no catalogue route', tracks: 404, play: true,
+        expectFailure: 'The station could not be loaded',
+      },
     ],
   },
 ]
@@ -428,6 +501,7 @@ function textsOf(component) {
 async function runCase(pkg, testCase) {
   const { calls, ctx, adoptDurable, observeLast } = makeServices()
   calls.scheme = testCase.scheme === undefined ? 'dark' : testCase.scheme
+  lastAudio = null
   store.clear()
   for (const [scheme, id] of Object.entries(testCase.stored === undefined ? {} : testCase.stored)) {
     store.set('omaseek.themes', JSON.stringify({ [scheme]: id }))
@@ -435,12 +509,19 @@ async function runCase(pkg, testCase) {
 
   globalThis.fetch = async (path) => {
     if (path === '/api/omaseek.themes') return jsonResponse(THEMES)
-    if (path.indexOf('/api/omaseek.music.chunk') === 0) {
-      return { ok: true, status: 200, async arrayBuffer() { return new ArrayBuffer(4096) } }
-    }
-    if (path === '/api/omaseek.music.meta') {
-      if (testCase.meta === null) return { ok: false, status: 500, async json() { return { error: 'nope' } } }
-      return jsonResponse(testCase.meta === undefined ? NO_TRACK : testCase.meta)
+    // The station's catalogue, and the only route the music card asks for.
+    if (path === '/api/omaseek.music.tracks') {
+      if (testCase.tracks === null) return { ok: false, status: 500, async json() { return { error: 'nope' } } }
+      // A host that does not have the route at all answers the way a real one
+      // would: not found.
+      if (testCase.tracks === 404) return { ok: false, status: 404, async json() { return {} } }
+      if (testCase.tracks !== undefined) return jsonResponse(testCase.tracks)
+      if (testCase.meta === undefined) return jsonResponse({ station: 'omarchy', name: 'Omarchy', tracks: [] })
+      // A case that names `meta` is a catalogue with that one song in it.
+      return jsonResponse({
+        station: 'omarchy', name: 'Omarchy',
+        tracks: [Object.assign({ file: 'track.mp3' }, testCase.meta)],
+      })
     }
     return { ok: false, status: 404, async json() { return {} } }
   }
@@ -507,10 +588,40 @@ async function runCase(pkg, testCase) {
 
   const { rendered, nodes } = renderAll(calls, problems)
 
+  /** The card as it is drawn right now, re-rendered from its own state. */
+  const texts = () => {
+    const card = calls.registered.find((entry) => entry.options.name === 'shell.overlay')
+    return card === undefined ? [] : textsOf(card.component)
+  }
+
+  /**
+   * Press a control the way the page would: find it by what it says it is and
+   * call its handler. Next and prev are found the same way play is, so a
+   * transport that lost its label fails here rather than passing quietly.
+   */
+  const press = (label, times) => {
+    for (let i = 0; i < (times === undefined ? 1 : times); i += 1) {
+      const control = nodes.find((node) => node.props['aria-label'] === label
+        && typeof node.props.onClick === 'function')
+      if (control === undefined) {
+        problems.push(`no "${label}" control on the card`)
+        return false
+      }
+      try {
+        control.props.onClick()
+      } catch (error) {
+        problems.push(`pressing "${label}" threw: ${error.message}`)
+        return false
+      }
+    }
+    return true
+  }
+
   // Press play the way the page would, with the media element answering or
   // failing, and check the card says something rather than sitting on
   // "loading" forever.
   audioMode = testCase.audio === undefined ? 'ok' : testCase.audio
+  if (testCase.click !== undefined) press(testCase.click, testCase.clicks)
   if (testCase.play === true) {
     const play = nodes.find((node) => typeof node.props['aria-label'] === 'string'
       && node.props['aria-label'].indexOf('Play the track') === 0
@@ -524,15 +635,39 @@ async function runCase(pkg, testCase) {
       }
       await new Promise((done) => setTimeout(done, 30))
     }
-    if (testCase.expectFailure !== undefined) {
-      const card = calls.registered.find((entry) => entry.options.name === 'shell.overlay')
-      const texts = card === undefined ? [] : textsOf(card.component)
-      if (testCase.expectFailure === null) {
-        const wrong = texts.filter((text) => /could not|No track is set/.test(text))
-        if (wrong.length > 0) problems.push(`the card reports a failure it should not: ${wrong.join(', ')}`)
-      } else if (!texts.includes(testCase.expectFailure)) {
-        problems.push(`the card does not say "${testCase.expectFailure}" (it says: ${texts.join(' | ')})`)
-      }
+  }
+
+  // The song ran out under the card, which is a media event and not a press.
+  if (testCase.end === true) {
+    const element = lastAudio
+    if (element === null) problems.push('no media element to end')
+    else {
+      element.emit('ended')
+      await new Promise((done) => setTimeout(done, 30))
+    }
+  }
+
+  if (testCase.expectFailure !== undefined) {
+    const said = texts()
+    if (testCase.expectFailure === null) {
+      const wrong = said.filter((text) => /could not|No track is set/.test(text))
+      if (wrong.length > 0) problems.push(`the card reports a failure it should not: ${wrong.join(', ')}`)
+    } else if (!said.includes(testCase.expectFailure)) {
+      problems.push(`the card does not say "${testCase.expectFailure}" (it says: ${said.join(' | ')})`)
+    }
+  }
+
+  // Which song the card is on, read off the card rather than off the code.
+  if (testCase.expectTrack !== undefined) {
+    if (!texts().includes(testCase.expectTrack)) {
+      problems.push(`the card is not on "${testCase.expectTrack}" (it says: ${texts().join(' | ')})`)
+    }
+  }
+
+  // A string the card must be showing somewhere, badge or message.
+  if (testCase.expectText !== undefined) {
+    if (!texts().includes(testCase.expectText)) {
+      problems.push(`the card does not show "${testCase.expectText}" (it says: ${texts().join(' | ')})`)
     }
   }
 

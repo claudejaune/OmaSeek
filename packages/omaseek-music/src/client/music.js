@@ -1,27 +1,21 @@
 /**
- * OmaMusic — the Omarchy site's music card as a floating Player. Client half.
+ * OmaMusic — the station card. Client half.
  *
- * The same card omarchy.org docks to the viewport's bottom-left corner,
- * rebuilt on the harness and set loose: it floats above everything through
- * `shell.overlay`, and a drag anywhere but the seek line moves it. It is
- * otherwise the site's player, not a homage — the state machine, the silent
- * clock that keeps the meter and the progress line moving before the sound
- * is ever asked for, the analysed-timeline bands while paused, the live
- * Web-Audio read when it is playing, the seek whose handle is just the end
- * of the painted line, the brand ring pulsing on the untouched art: all
- * ported from `src/lib/music.ts` and `MusicControl.tsx` of the site's own
- * sources. The transport glyph is from radio.omarchy.org's bitmap icon set,
- * kept at `assets/icons/transport.json` and served by the Node half — play,
- * always shown when paused; pause, hidden while playing and lifted by hover
- * — and unlike the site's volume fade this card pauses the track for real.
- * The meter, too, is a switch of its own: a click holds the bars frozen,
- * sound and progress carrying on regardless.
+ * A port of the deck's own player: the same card, the same analysed bands,
+ * the same silent clock that keeps the meter and the progress line moving
+ * before the sound is ever asked for. What this half adds is the station
+ * itself — the whole playlist, walked with prev and next — so the card is no
+ * longer one song but the songs, in the order the site plays them.
  *
- * The bytes arrive from this package's Node half over `/api/omaseek.music.*`:
- * metadata, the art and the timeline in one call, the MP3 as raw windows
- * stitched into a Blob URL. Browsers will not autoplay sound
- * without a gesture, so the card starts paused — ring pulsing, one click from
- * the sound.
+ * The catalogue comes from the Node half over `/api/omaseek.music.tracks`,
+ * which resolves the station's playlist to one address per song. The bytes are
+ * streamed from the station's own host:
+ * it answers with `access-control-allow-origin: *` and `accept-ranges: bytes`,
+ * which is what lets the card seek inside a song and read it through the
+ * analyser without a proxy in the middle.
+ *
+ * Browsers will not autoplay sound without a gesture, so the card starts
+ * paused — ring pulsing, one click from the sound.
  *
  * Plain JavaScript ESM, because `build/bundle-client.mjs` rewrites it into the
  * page's closure factory: `react` comes off the module table the shell seeds,
@@ -32,11 +26,14 @@ import React from 'react'
 import { fetchJson, insertSheet } from './dom.js'
 import { createNotifier, h } from './ui.js'
 
-/** Fallback identity; the Node half serves the same strings. */
+/** Shown when nothing at all could be read, not even the bundled playlist. */
 var TRACK = {
-  title: 'We Can Fix Everything (The Ultimate Machine)',
-  artist: 'Kevin Koontz',
+  title: 'Omarchy Radio',
+  artist: 'the station',
 }
+
+/** The station's own address, for the tooltip when a track came from it. */
+var RADIO = 'https://radio.omarchy.org/'
 
 /* Ported analysis constants — src/lib/music.ts of the site. */
 var BANDS = 32
@@ -76,11 +73,14 @@ function clock(seconds) {
 var CSS = [
   // The overlay layer is click-through; the card opts its box back in.
   // Move cursor everywhere but the controls; the seek drags itself.
-  '.omamusic{position:fixed;z-index:2147483000;display:flex;height:46px;align-items:stretch;',
+  // The card is a column: the site's 46px face on top, the transport it
+  // hangs beneath — the same three controls the deck puts under its own card.
+  '.omamusic{position:fixed;z-index:2147483000;display:flex;flex-direction:column;align-items:stretch;',
   'border:1px solid var(--dsw-alias-border-l1);',
   'background:color-mix(in srgb, var(--dsw-alias-bg-base) 85%, transparent);',
   'backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);',
   'pointer-events:auto;touch-action:none;user-select:none;cursor:move}',
+  '.omamusic-row{display:flex;height:46px;align-items:stretch;position:relative}',
   '.omamusic button,.omamusic input{cursor:pointer}',
   // Art button: the cover, a veil with the volume glyph, a brand ring
   // pulsing until the sound has been touched.
@@ -109,21 +109,12 @@ var CSS = [
   '.omamusic:has(.omamusic-seek:hover) .omamusic-readout,.omamusic:has(.omamusic-seek:active) .omamusic-readout,',
   '.omamusic:has(.omamusic-seek:focus-visible) .omamusic-readout{opacity:1}',
   // The four-level meter, brand-colored, driven per frame outside React.
-  // It is also the visualization's switch: a click holds the bars where
-  // they are, a second lets them run again. The padding is the switch's
-  // roomy hit area, pulled back by an equal negative margin so the bars
-  // sit exactly where the bare span used to. A <button> is border-box by
-  // the UA default — unlike the span it replaced, it would swallow this
-  // padding into the 18px width and spill the unshrinkable bars past the
-  // card's right edge, so the width is put back on the content box.
   '.omamusic-meter{display:flex;align-items:flex-end;gap:2px;box-sizing:content-box;',
   'width:18px;height:12px;flex:none;',
   'align-self:center;position:relative;padding:10px 12px 10px 10px;margin:-10px 0 -10px -10px;',
   'border:none;background:transparent;border-radius:4px}',
   '.omamusic-meter:hover{background:rgba(128,128,128,.12)}',
   '.omamusic-bar{display:block;width:3px;flex:none;height:2px;background:var(--dsw-alias-brand-primary)}',
-  // The switch's own tooltip, hung over the meter: a second of hover
-  // before it fades up, and it says which way the next click goes.
   '.omamusic-viz-tip{position:absolute;left:50%;bottom:calc(100% + 8px);transform:translateX(-50%);',
   'padding:6px 8px;border:1px solid var(--dsw-alias-border-l1);',
   'background:var(--dsw-specific-tip, var(--dsw-alias-bg-overlay));',
@@ -142,33 +133,45 @@ var CSS = [
   '.omamusic-seek::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:0;height:14px;',
   'border:none;background:transparent}',
   '.omamusic-seek::-moz-range-thumb{width:0;height:14px;border:none;background:transparent}',
-  // Hover tooltip: the full title over the artist, painted with the tip
-  // token so it follows the active palette (fallback: the overlay surface).
+  // Hover tooltip: the full title over the artist, painted with the tip token.
   '.omamusic-tip{position:absolute;left:0;bottom:calc(100% + 8px);display:flex;flex-direction:column;',
   'gap:2px;padding:8px 10px;border:1px solid var(--dsw-alias-border-l1);',
   'background:var(--dsw-specific-tip, var(--dsw-alias-bg-overlay));',
   'box-shadow:0 4px 16px rgba(0,0,0,.25);opacity:0;pointer-events:none;white-space:nowrap;',
   'transition:opacity .15s ease-out}',
-  // The tip lingers a moment before it appears — 1.5 s of hover, then the
-  // same fade; leaving unpainted, it fades out at once. And it is no
-  // luggage: while the card is being dragged the tip stays behind.
   '.omamusic:hover .omamusic-tip{opacity:1;transition-delay:1.5s}',
   '.omamusic[data-dragging="1"] .omamusic-tip{opacity:0;transition-delay:0s}',
-  // Nor does the card tip crowd the meter's own: while the pointer is on
-  // the meter, the only tip is the switch's.
   '.omamusic:has(.omamusic-meter:hover) .omamusic-tip{opacity:0;transition-delay:0s}',
   '.omamusic-tip-title{font-size:12px;font-weight:500;color:var(--dsw-alias-label-primary)}',
   '.omamusic-tip-artist{font-size:11px;color:var(--dsw-alias-label-secondary)}',
+  // The transport: the site's own three controls, moved under the card's
+  // face. prev and next are presses; only the play button is a state.
+  '.omamusic-transport{display:flex;align-items:center;border-top:1px solid var(--dsw-alias-border-l1)}',
+  '.omamusic-tb{display:flex;flex:1;height:26px;align-items:center;justify-content:center;',
+  'padding:0;border:none;background:transparent;color:var(--dsw-alias-label-secondary)}',
+  '.omamusic-tb + .omamusic-tb{border-left:1px solid var(--dsw-alias-border-l1)}',
+  '.omamusic-tb:hover{background:rgba(128,128,128,.12);color:var(--dsw-alias-label-primary)}',
+  '.omamusic-tb:focus-visible{outline:1px solid var(--dsw-alias-brand-primary);outline-offset:-2px}',
+  '.omamusic-tb[aria-disabled="true"]{opacity:.4}',
+  '.omamusic-tb-play{color:var(--dsw-alias-label-primary)}',
+  // The label the station puts on a song that swears, kept small enough to
+  // sit between the byline and the meter without pushing either aside.
+  '.omamusic-e{flex:none;align-self:center;padding:0 4px;border:1px solid var(--dsw-alias-border-l1);',
+  'font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:9px;line-height:13px;',
+  'color:var(--dsw-alias-label-secondary)}',
+  // Where this track sits in the station, when it came from one. It is a
+  // label rather than a control, so the press goes to the row underneath.
+  '.omamusic-count{flex:none;align-self:center;padding:0 10px;pointer-events:none;',
+  'font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;',
+  'color:var(--dsw-alias-label-secondary)}',
 ].join('\n')
 
 /**
- * Transport glyphs borrowed from radio.omarchy.org (src/lib/icons.ts) and
- * kept as this plugin's own file at `assets/icons/transport.json`, which the
- * Host half serves inside `omamusic.meta`; the cells below are the inlined
- * copy of that file, the fallback if it is missing. Stepped pixel art on a
- * 12x10 lattice, one cell to one CSS pixel, so the steps land on the pixel
- * grid and crispEdges keeps them there. Play: the BIG triangle; Pause: two
- * 3x10 bars.
+ * Transport glyphs borrowed from radio.omarchy.org (src/lib/icons.ts). Stepped
+ * pixel art on a 12x10 lattice, one cell to one CSS pixel, so the steps land
+ * on the pixel grid and crispEdges keeps them there. Play: the BIG triangle;
+ * Pause: two 3x10 bars; prev and next: the site's two small triangles a side,
+ * the way a tape deck marks them rather than a bar and one.
  */
 var SCALE = 1
 var PLAY_CELLS = [
@@ -176,12 +179,26 @@ var PLAY_CELLS = [
   [1, 5, 10, 1], [1, 6, 8, 1], [1, 7, 6, 1], [1, 8, 4, 1], [1, 9, 2, 1],
 ]
 var PAUSE_CELLS = [[2, 0, 3, 10], [7, 0, 3, 10]]
+/** One small triangle is ten rows: 1,2,3,4,5 cells out then 5,4,3,2,1 back. */
+var SMALL = [1, 2, 3, 4, 5, 5, 4, 3, 2, 1]
 
-/** Replaced with the file's cells the moment the meta — and icons — arrive. */
-var GLYPHS = { play: PLAY_CELLS, pause: PAUSE_CELLS }
+/** A triangle's rows as rects, growing toward `dir` from `x0` in a `span`. */
+function triangleCells(rows, dir, x0, span) {
+  var cells = []
+  for (var y = 0; y < rows.length; y += 1) {
+    var w = rows[y]
+    cells.push([dir === 'right' ? x0 : x0 + (span - w), y, w, 1])
+  }
+  return cells
+}
 
-function transportIcon(on) {
-  var cells = on ? GLYPHS.pause : GLYPHS.play
+var PREV_CELLS = triangleCells(SMALL, 'left', 0, 5).concat(triangleCells(SMALL, 'left', 6, 5))
+var NEXT_CELLS = triangleCells(SMALL, 'right', 0, 5).concat(triangleCells(SMALL, 'right', 6, 5))
+
+var GLYPHS = { play: PLAY_CELLS, pause: PAUSE_CELLS, prev: PREV_CELLS, next: NEXT_CELLS }
+
+function glyphIcon(name) {
+  var cells = GLYPHS[name] === undefined ? PLAY_CELLS : GLYPHS[name]
   var rects = []
   for (var i = 0; i < cells.length; i += 1) {
     rects.push(h('rect', { key: i, x: cells[i][0], y: cells[i][1], width: cells[i][2], height: cells[i][3] }))
@@ -192,33 +209,56 @@ function transportIcon(on) {
   }, rects)
 }
 
+function transportIcon(on) {
+  return glyphIcon(on ? 'pause' : 'play')
+}
+
 export function applyFeature(host) {
   // The feature attaches when its services exist: the page's plugin tree is
   // still assembling while this apply runs, so a plain `ctx.get` here would
-  // read an empty tree and the section would never appear.
+  // read an empty tree and the card would never appear.
   host.inject(['slots'], function (ctx) {
   var slots = ctx.get('slots')
   if (slots === undefined) return
 
   // ---------------------------------------------------------------
   // The sound. A port of the site's src/lib/music.ts, kept to what
-  // the card needs: state, silent clock, timeline bands, live meter.
+  // the card needs: state, silent clock, live meter.
   // ---------------------------------------------------------------
   var meta = null
-  var frames = null
   var duration = 0
-  var fps = 15
-  var tlBands = 16
   var clockZero = null
+
+  /**
+   * The station: every track the card can walk through, and which one it is
+   * on. The queue is the playlist as the Node half resolved it — the
+   * station's own address for each song — so next and prev are an index in
+   * this list and nothing more. A card pointed at one file by hand has a
+   * queue of exactly that one track.
+   */
+  var queue = []
+  var index = 0
+  /** Whether the card is meant to be making sound, across track changes. */
+  var wantPlaying = false
 
   var audio = null
   var audioContext = null
   var analyser = null
   var running = false
-  var objectUrl = ''
-  // Set by the disposer: the 7 MB track can land long after the plugin was
-  // stopped, and a late arrival must not open an audio context or start
-  // playing sound nothing can reach any more.
+  /** What the element was last pointed at, for the CORS retry. */
+  var trackSrc = ''
+  /** Whether the CORS retry has already been spent on this track. */
+  var loadRetried = false
+  /**
+   * Set when the card itself moved the track on — a song ending, or a failed
+   * one it had chosen. The error path reads it to tell "the station is down,
+   * walk on" from "the listener picked this song and it is not there", which
+   * is not a reason to run the whole list past them.
+   */
+  var endedByItself = false
+  // Set by the disposer: a track can land long after the plugin was stopped,
+  // and a late arrival must not open an audio context or start playing sound
+  // nothing can reach any more.
   var disposed = false
   var freq = new Float32Array(0)
   var bins = []
@@ -240,6 +280,25 @@ export function applyFeature(host) {
   var announce = notifier.notify
   var subscribe = notifier.subscribe
 
+  /** The track that is playing, or the only one there is. */
+  function current() {
+    return queue.length === 0 ? null : queue[index]
+  }
+  function title() {
+    var track = current()
+    return track === null || track.title === '' ? TRACK.title : track.title
+  }
+  function artist() {
+    var track = current()
+    return track === null || track.artist === '' ? TRACK.artist : track.artist
+  }
+  /** Past the end of the station the first song comes round again, which is
+   *  what the deck does with its own playlist. */
+  function step(by) {
+    if (queue.length === 0) return
+    index = (index + by + queue.length) % queue.length
+  }
+
   function live() {
     return running && audio !== null && !audio.paused
   }
@@ -255,29 +314,6 @@ export function applyFeature(host) {
     // not, currentTime holds still where the track stopped. Before that,
     // the silent clock carries the picture.
     return audio !== null ? audio.currentTime : clockPosition(performance.now())
-  }
-
-  /** The timeline's 16 bands at a position, spread to 32 and scaled. */
-  function timelineAt(position, out) {
-    if (frames === null) {
-      for (var z = 0; z < out.length; z += 1) out[z] = 0
-      return
-    }
-    var n = tlBands
-    var total = frames.length / n
-    var f = (position / duration) * fps
-    var a = Math.floor(f) % total
-    var b = (a + 1) % total
-    var mixRatio = f - Math.floor(f)
-    for (var i = 0; i < BANDS; i += 1) {
-      var at = ((i + 0.5) / BANDS) * n - 0.5
-      var lo = Math.max(0, Math.min(n - 1, Math.floor(at)))
-      var hi = Math.min(n - 1, lo + 1)
-      var t = Math.max(0, Math.min(1, at - lo))
-      var early = frames[a * n + lo] * (1 - t) + frames[a * n + hi] * t
-      var late = frames[b * n + lo] * (1 - t) + frames[b * n + hi] * t
-      out[i] = ((early * (1 - mixRatio) + late * mixRatio) / 255) * MUTED_GAIN
-    }
   }
 
   function layoutBands(sampleRate) {
@@ -305,28 +341,19 @@ export function applyFeature(host) {
   }
 
   /** Four coarse levels for the meter, from whichever source is current. */
-  var meterBands = new Float32Array(BANDS)
   var liveBands = new Float32Array(BANDS)
   function meter(out) {
     var per = BANDS / out.length
     var m, b, level
     if (!live() || !sounding()) {
-      timelineAt(timeNow(), meterBands)
-      for (m = 0; m < out.length; m += 1) {
-        level = 0
-        for (b = Math.floor(m * per); b < Math.floor((m + 1) * per); b += 1) {
-          level = Math.max(level, meterBands[b])
-        }
-        out[m] = level
-      }
+      // Nothing is coming out of the speakers, so the bars stand down rather
+      // than draw the browser's last audio buffer for ever, which would be a
+      // meter of the past.
+      for (m = 0; m < out.length; m += 1) out[m] = 0
       return
     }
-    // The live reading, auto-ranged — the per-frame work the site's
-    // music.sample() does and this card had never been doing: the peak
-    // decays slowly and jumps to anything louder, the floor creeps up
-    // towards it and drops at once. Without that the levels divide by
-    // the fixed 0.3-0.15 span and clamp straight to full height, which
-    // is the wall of bars the card used to freeze into.
+    // The live reading, auto-ranged: the peak decays slowly and jumps to
+    // anything louder, the floor creeps up towards it and drops at once.
     analyser.getFloatFrequencyData(freq)
     for (b = 0; b < BANDS; b += 1) {
       var raw = liveBand(b).raw
@@ -345,75 +372,59 @@ export function applyFeature(host) {
   }
 
   /**
-   * Whatever the sound needs before it can start. A streamed track needs
-   * nothing — the element fetches it — while a local file is read in windows
-   * first. Neither source at all is a failure the card reports.
+   * What the sound needs before it can start: a track, and an address to fetch
+   * it from. The element does the fetching, so there is nothing else to do.
    */
-  function prepare() {
-    if (meta === null) {
-      if (failure === '') failure = 'The track could not be loaded'
+  function prepare(track) {
+    if (track === null) {
+      if (failure === '') failure = 'No track is set'
       return Promise.reject(new Error('omaseek: no track'))
     }
-    if (typeof meta.url === 'string' && meta.url !== '') return Promise.resolve()
-    if (meta.size > 0) return fetchTrack()
-    // Nothing to play, and no better reason already on the card.
-    if (failure === '') failure = 'No track is set'
+    if (playable(track)) return Promise.resolve()
+    failure = 'The track could not be played'
     return Promise.reject(new Error('omaseek: no track'))
   }
 
-  /** Stitch the MP3 windows into one Blob URL. */
-  function fetchTrack() {
-    var parts = []
-    var offset = 0
-    function step() {
-      if (offset >= meta.size) {
-        objectUrl = URL.createObjectURL(new Blob(parts, { type: 'audio/mpeg' }))
-        // The track finished arriving after the plugin was stopped: hand the
-        // URL straight back rather than leaving it to nothing.
-        if (disposed) {
-          URL.revokeObjectURL(objectUrl)
-          objectUrl = ''
-        }
-        return Promise.resolve()
-      }
-      return fetch('/api/omaseek.music.chunk?offset=' + offset + '&length=' + (1 << 20))
-        .then(function (response) {
-          if (!response.ok) throw new Error('omaseek: track chunk responded ' + response.status)
-          return response.arrayBuffer()
-        })
-        .then(function (buffer) {
-          var slice = new Uint8Array(buffer)
-          if (slice.length === 0) throw new Error('track stream stalled at ' + offset)
-          parts.push(slice)
-          offset += slice.length
-          return step()
-        })
-    }
-    return step()
+  /**
+   * Where the sound comes from for the track that is up: the station's own
+   * copy of the song. There is no other kind of track.
+   */
+  function source() {
+    var track = current()
+    return track === null || typeof track.url !== 'string' ? '' : track.url
+  }
+
+  /** Whether the track that is up has anywhere to play from at all. */
+  function playable(track) {
+    return track !== null && typeof track.url === 'string' && track.url !== ''
   }
 
   /**
-   * Where the sound comes from: the URL this package serves (the station's own
-   * copy of the track), or — when a local file was named instead — the blob the
-   * chunk route fed us. Never both, and possibly neither.
+   * Point the element at the track that is up, and follow it. Every song takes
+   * over the same element, so the analyser wired to it keeps working and the
+   * meter is never rebuilt for a new track. `crossOrigin` is set *before* the
+   * source, because assigning one to an element that is already fetching
+   * without CORS does not re-read it with any.
    */
-  function source() {
-    if (meta !== null && typeof meta.url === 'string' && meta.url !== '') return meta.url
-    return objectUrl
+  function load(track, keepEnded) {
+    if (audio === null || track === null) return
+    trackSrc = source()
+    loadRetried = false
+    if (!keepEnded) endedByItself = false
+    // Reading the station's stream through the analyser needs the station to
+    // allow it; the radio does. If one day it does not, the error handler
+    // retries without, which keeps the sound and loses the meter.
+    audio.crossOrigin = 'anonymous'
+    // A station of one has nothing to walk on to, so that element loops; a
+    // list of songs changes track instead.
+    audio.loop = queue.length <= 1
+    audio.src = trackSrc
   }
 
   /** Wire the media element through the analyser, straight to the speakers. */
   function wire() {
     audio = new Audio()
-    audio.loop = true
     audio.preload = 'auto'
-    var streamed = source() !== objectUrl
-    if (streamed) {
-      // Reading a cross-origin stream through the analyser needs the host to
-      // allow it; the radio does. If it does not, `onError` retries without.
-      audio.crossOrigin = 'anonymous'
-    }
-    audio.src = source()
     audio.addEventListener('playing', function () {
       running = true
       if (state === 'loading') {
@@ -430,29 +441,40 @@ export function applyFeature(host) {
     audio.addEventListener('pause', function () {
       running = false
     })
-    var retried = false
+    audio.addEventListener('ended', end)
     audio.addEventListener('error', function () {
       // A streamed track from a host that sends no CORS headers fails outright
       // while `crossOrigin` is set. Dropping it keeps the sound and loses only
-      // the meter; a second failure means the track cannot be reached at all —
-      // no network, no station, no file.
-      if (streamed && !retried) {
-        retried = true
+      // the meter.
+      if (!loadRetried) {
+        loadRetried = true
         audio.crossOrigin = null
-        audio.src = source()
+        audio.src = trackSrc
         audio.load()
-        var again = audio.play()
-        if (again !== undefined && again.catch !== undefined) again.catch(function () {})
+        if (wantPlaying) {
+          var again = audio.play()
+          if (again !== undefined && again.catch !== undefined) again.catch(function () {})
+        }
         return
       }
+      // The station, or the file, is not there. A track that ended into this
+      // one is the card's own doing, so it is the card's to walk on from —
+      // once. A station that is down would otherwise run the whole list past
+      // the listener one failure at a time, so the walk clears its own flag
+      // and the next failure is simply the failure.
       failure = 'The track could not be reached'
       state = 'failed'
-      announce()
+      running = false
+      if (endedByItself) {
+        endedByItself = false
+        advance()
+      } else announce()
     })
-    // The file knows how long it is, which is what a track with no analysed
-    // timeline relies on for its progress line and its seek.
+    // Whoever answers knows how long the track is, which is what the progress
+    // line and the seek work from. A track that changes under us — the next
+    // one — re-lengths the card here rather than at the press.
     audio.addEventListener('loadedmetadata', function () {
-      if (duration <= 0 && isFinite(audio.duration) && audio.duration > 0) {
+      if (isFinite(audio.duration) && audio.duration > 0) {
         duration = audio.duration
         clockZero = performance.now() - audio.currentTime * 1000
         announce()
@@ -466,32 +488,27 @@ export function applyFeature(host) {
     layoutBands(audioContext.sampleRate)
     audioContext.createMediaElementSource(audio).connect(analyser)
     analyser.connect(audioContext.destination)
+    load(current(), true)
   }
 
-  /** Start — or restart — the track for real. The first press also fetches. */
-  function play() {
-    touched = true
-    if (state === 'playing') return
-    // No meta yet, or none ever: the byte loop needs a size, and a press here
-    // would throw out of the click handler and leave the card on "loading"
-    // forever. Saying so is the honest answer.
-    if (meta === null) {
-      failure = 'The track could not be loaded'
-      state = 'failed'
-      announce()
-      return
-    }
+  /**
+   * Bring the sound up on the track that is up. A track already loaded simply
+   * resumes from where it was paused, picking up the silent clock if it has
+   * never sounded; one that has just taken over starts from its own top.
+   */
+  function start(keepEnded) {
+    var track = current()
     state = 'loading'
+    if (failure !== 'The track could not be reached') failure = ''
     announce()
-    var ready = audio === null ? prepare() : Promise.resolve()
+    var ready = audio === null ? prepare(track) : Promise.resolve()
     ready.then(function () {
       if (disposed) return
       if (audio === null) wire()
+      else if (trackSrc !== source()) load(track, keepEnded)
       if (audioContext.state !== 'running') return audioContext.resume()
     }).then(function () {
       if (disposed) return
-      // A cold start picks up where the silent clock got to; a resumed
-      // one simply goes on from where it was paused.
       if (audio.currentTime === 0 && duration > 0) audio.currentTime = clockPosition(performance.now())
       return audio.play()
     }).catch(function () {
@@ -503,16 +520,82 @@ export function applyFeature(host) {
     })
   }
 
+  /** Start — or restart — the track for real. The first press also fetches. */
+  function play() {
+    touched = true
+    wantPlaying = true
+    if (state === 'playing') return
+    if (current() === null) {
+      // Nothing to play — but the card already knows *why* nothing is there,
+      // and "no track is set" is not the answer when the station was the thing
+      // that could not be read. Only a card that never got an answer says it.
+      if (failure === '') failure = 'No track is set'
+      state = 'failed'
+      announce()
+      return
+    }
+    start(false)
+  }
+
   /** Stop the sound where it is; the meter and line freeze with it. */
   function pause() {
+    wantPlaying = false
     if (audio !== null) audio.pause()
     if (state !== 'failed') state = 'paused'
     announce()
   }
 
   function toggle() {
-    if (state === 'playing' || state === 'loading') pause()
+    if (wantPlaying) pause()
     else play()
+  }
+
+  /**
+   * The track is over. The station plays on into the next one if the listener
+   * had it playing, and stops quietly if they had paused it — a song ending is
+   * not a reason to start making noise, but it is a reason to be at the top of
+   * the next one.
+   */
+  function end() {
+    step(1)
+    endedByItself = true
+    duration = 0
+    clockZero = performance.now()
+    if (wantPlaying) start(true)
+    else {
+      load(current(), true)
+      announce()
+    }
+  }
+
+  /**
+   * Next and prev. A track picked by hand has to sound: the press is a gesture
+   * of its own, and walking the station silently would be a control that does
+   * nothing. The element is left alone until the meta arrives — `start` loads
+   * the new track itself — so the old sound is not cut before the new one is
+   * ready.
+   */
+  function go(by) {
+    if (queue.length === 0) return
+    touched = true
+    wantPlaying = true
+    step(by)
+    duration = 0
+    clockZero = performance.now()
+    announce()
+    start(false)
+  }
+
+  /** Walk on from a track that failed, when the card is what chose it. */
+  function advance() {
+    endedByItself = true
+    if (wantPlaying && queue.length > 1) {
+      step(1)
+      start(true)
+      return
+    }
+    state = 'failed'
+    announce()
   }
 
   function seek(seconds) {
@@ -524,55 +607,55 @@ export function applyFeature(host) {
     clockZero = performance.now() - at * 1000
   }
 
-  // The meta + timeline arrival boots the silent clock, exactly as the
-  // site's loadMusic() does on page paint.
+  // The catalogue's arrival boots the silent clock, exactly as the site's
+  // loadMusic() does on page paint. The station's own playlist is what the
+  // card walks through, in the order the site plays it.
+  //
+  // Both routes are asked at once and the two answers are settled together,
+  // because they are one question — what is this card going to play — and
+  // announcing them one at a time let a failing fallback say "no track" over
+  // the station's own failure.
   ctx.effect(function () {
     var alive = true
-    fetchJson('/api/omaseek.music.meta').then(function (result) {
-      if (!alive) return
-      var tl = result.timeline
-      // A host with no track answers 200 with size 0 rather than failing the
-      // request — the card reports that instead of throwing out of its own
-      // fulfillment handler, which no rejection handler can catch.
-      if (result.size === 0 && (typeof result.url !== 'string' || result.url === '')) {
-        meta = result
-        failure = 'No track is set'
-        state = 'failed'
-        announce()
-        return
-      }
-      meta = result
-      // A track of your own may have no analysed timeline beside it. It still
-      // plays: the duration comes off the file itself (see `wire`), and the
-      // paused meter falls back to the live analyser.
-      if (tl === null || tl === undefined) {
-        console.log('omamusic: no timeline for this track; the meter will follow the audio')
-        announce()
-        return
-      }
-      if (result.icons !== null && result.icons !== undefined
-          && result.icons.play && result.icons.pause
-          && Array.isArray(result.icons.play.cells) && Array.isArray(result.icons.pause.cells)) {
-        GLYPHS = { play: result.icons.play.cells, pause: result.icons.pause.cells }
-      }
-      duration = tl.duration
-      fps = tl.fps
-      tlBands = tl.bands
-      var raw = atob(tl.spectrum)
-      frames = new Uint8Array(raw.length)
-      for (var i = 0; i < raw.length; i += 1) frames[i] = raw.charCodeAt(i)
-      if (clockZero === null) clockZero = performance.now()
+
+    function showStation(result) {
+      var tracks = result.tracks === undefined || result.tracks === null ? [] : result.tracks
+      if (tracks.length === 0) throw new Error('the station listed no tracks')
+      queue = tracks
+      index = 0
+      meta = current()
       announce()
-    }, function (error) {
-      // No meta means no track and no art: say so on the card rather than
-      // leaving it looking idle. Offline is the usual reason.
-      console.error('omamusic: ' + String((error && error.message) || error))
-      if (!alive) return
-      meta = { title: TRACK.title, artist: TRACK.artist, url: '', size: 0, art: '', timeline: null, icons: null }
-      failure = 'The track could not be loaded'
+    }
+
+    function showNothing(stationFailed) {
+      meta = null
       state = 'failed'
+      // The one half that was asked, and whether it answered. A station that
+      // could not be read is a station problem; a station that answered with
+      // nothing to play is a track problem.
+      failure = stationFailed ? 'The station could not be loaded' : 'No track is set'
+      console.error('omamusic: ' + failure)
       announce()
+    }
+
+    // The station, in one answer. A host with no catalogue route at all — an
+    // older build — leaves the card with nothing to play, and that is said
+    // rather than worked around.
+    fetchJson('/api/omaseek.music.tracks').then(function (result) {
+      if (!alive) return
+      try {
+        showStation(result)
+      } catch (empty) {
+        console.error('omamusic: ' + String((empty && empty.message) || empty))
+        if (!alive) return
+        showNothing(false)
+      }
+    }).catch(function (error) {
+      if (!alive) return
+      console.error('omamusic: ' + String((error && error.message) || error))
+      showNothing(true)
     })
+
     return function () {
       alive = false
       disposed = true
@@ -580,12 +663,11 @@ export function applyFeature(host) {
         audio.pause()
         audio.src = ''
       }
-      if (objectUrl !== '') URL.revokeObjectURL(objectUrl)
       if (audioContext !== null) {
         try { audioContext.close() } catch (ignored) {}
       }
     }
-  }, 'omamusic: track')
+  }, 'omamusic: station')
 
   ctx.effect(function () { return insertSheet(CSS, 'omamusic:cards') }, 'omamusic: styles')
 
@@ -720,6 +802,13 @@ export function applyFeature(host) {
     }
 
     var on = sounding()
+    var playing = wantPlaying && state !== 'failed'
+    var art = meta !== null && typeof meta.art === 'string' ? meta.art : ''
+    var fromStation = queue.length > 1
+    // The station's own address for the track that is up, so the card can be
+    // followed back to the song. A file named by hand has none to offer.
+    var link = current() !== null && typeof current().url === 'string'
+      && current().url.indexOf(RADIO) === 0 ? current().url : ''
     return h('div', {
       className: 'omamusic',
       'data-on': on ? '1' : '0',
@@ -727,68 +816,111 @@ export function applyFeature(host) {
       onPointerDown: onPointerDown,
       style: { left: home.current.left + 'px', top: home.current.top + 'px' },
     },
-      h('button', {
-        className: 'omamusic-art',
-        type: 'button',
-        'aria-pressed': on,
-        'aria-label': on ? 'Pause the track' : 'Play the track',
-        title: on ? 'Pause' : 'Play',
-        style: meta !== null ? { backgroundImage: 'url(' + meta.art + ')' } : null,
-        onClick: function () {
-          if (dragMoved.current) return
-          toggle()
+      h('div', { className: 'omamusic-row' },
+        h('button', {
+          className: 'omamusic-art',
+          type: 'button',
+          'aria-pressed': on,
+          'aria-label': on ? 'Pause the track' : 'Play the track',
+          title: on ? 'Pause' : 'Play',
+          style: art === '' ? null : { backgroundImage: 'url(' + art + ')' },
+          onClick: function () {
+            if (dragMoved.current) return
+            toggle()
+          },
         },
-      },
-        touched ? null : h('span', { 'aria-hidden': 'true', className: 'omamusic-ring' }),
-        h('span', { className: 'omamusic-veil', 'aria-hidden': 'true' }, transportIcon(on))),
-      h('span', { className: 'omamusic-tip', 'aria-hidden': 'true' },
-        h('span', { className: 'omamusic-tip-title' }, TRACK.title),
-        h('span', { className: 'omamusic-tip-artist' }, TRACK.artist)),
-      h('span', { className: 'omamusic-text' },
-        h('span', { className: 'omamusic-title' },
-          state === 'failed' ? failure : shortTitle(TRACK.title)),
-        h('span', { className: 'omamusic-byline' },
-          h('span', { className: 'omamusic-artist' }, TRACK.artist),
-          h('span', { 'aria-hidden': 'true', ref: readoutRef, className: 'omamusic-readout' }))),
-      h('button', {
-        type: 'button',
-        className: 'omamusic-meter',
-        'aria-pressed': vizPaused,
-        'aria-label': vizPaused ? 'Resume visualization' : 'Pause visualization',
-        onClick: function () {
-          if (dragMoved.current) return
-          vizPaused = !vizPaused
-          announce()
+          touched ? null : h('span', { 'aria-hidden': 'true', className: 'omamusic-ring' }),
+          h('span', { className: 'omamusic-veil', 'aria-hidden': 'true' }, transportIcon(on))),
+        h('span', { className: 'omamusic-tip', 'aria-hidden': 'true' },
+          h('span', { className: 'omamusic-tip-title' }, title()),
+          h('span', { className: 'omamusic-tip-artist' }, artist()),
+          fromStation ? h('span', { className: 'omamusic-tip-artist' }, link) : null),
+        h('span', { className: 'omamusic-text' },
+          h('span', { className: 'omamusic-title' },
+            state === 'failed' ? failure : shortTitle(title())),
+          h('span', { className: 'omamusic-byline' },
+            h('span', { className: 'omamusic-artist' }, artist()),
+            h('span', { 'aria-hidden': 'true', ref: readoutRef, className: 'omamusic-readout' }))),
+        // The station labels the songs that swear, and the label is the
+        // playlist's own field — the card only has to say so.
+        current() !== null && current().explicit === true
+          ? h('span', { className: 'omamusic-e', title: 'Explicit' }, 'E')
+          : null,
+        fromStation ? h('span', { className: 'omamusic-count' }, (index + 1) + '/' + queue.length) : null,
+        h('button', {
+          type: 'button',
+          className: 'omamusic-meter',
+          'aria-pressed': vizPaused,
+          'aria-label': vizPaused ? 'Resume visualization' : 'Pause visualization',
+          onClick: function () {
+            if (dragMoved.current) return
+            vizPaused = !vizPaused
+            announce()
+          },
         },
-      },
-        [0, 1, 2, 3].map(function (i) {
-          return h('span', {
-            key: i,
-            ref: function (el) { barsRef.current[i] = el },
-            className: 'omamusic-bar',
-          })
+          [0, 1, 2, 3].map(function (i) {
+            return h('span', {
+              key: i,
+              ref: function (el) { barsRef.current[i] = el },
+              className: 'omamusic-bar',
+            })
+          }),
+          h('span', { className: 'omamusic-viz-tip', 'aria-hidden': 'true' },
+            vizPaused ? 'Resume visualization' : 'Pause visualization')),
+        h('span', {
+          'aria-hidden': 'true', ref: lineRef, className: 'omamusic-line',
+          style: { transform: 'scaleX(0)' },
         }),
-        h('span', { className: 'omamusic-viz-tip', 'aria-hidden': 'true' },
-          vizPaused ? 'Resume visualization' : 'Pause visualization')),
-      h('span', {
-        'aria-hidden': 'true', ref: lineRef, className: 'omamusic-line',
-        style: { transform: 'scaleX(0)' },
-      }),
-      h('input', {
-        ref: rangeRef,
-        type: 'range',
-        className: 'omamusic-seek',
-        min: 0,
-        max: 1000,
-        step: 5,
-        defaultValue: 0,
-        'aria-label': 'Position in the track',
-        onPointerDown: function () { scrubbing.current = true },
-        onPointerUp: function () { scrubbing.current = false },
-        onPointerCancel: function () { scrubbing.current = false },
-        onLostPointerCapture: function () { scrubbing.current = false },
-        onInput: function (event) { onScrub(Number(event.currentTarget.value)) },
-      }))
+        h('input', {
+          ref: rangeRef,
+          type: 'range',
+          className: 'omamusic-seek',
+          min: 0,
+          max: 1000,
+          step: 5,
+          defaultValue: 0,
+          'aria-label': 'Position in the track',
+          onPointerDown: function () { scrubbing.current = true },
+          onPointerUp: function () { scrubbing.current = false },
+          onPointerCancel: function () { scrubbing.current = false },
+          onLostPointerCapture: function () { scrubbing.current = false },
+          onInput: function (event) { onScrub(Number(event.currentTarget.value)) },
+        })),
+      // The deck's own transport, in the same order: back, play, forward.
+      // prev and next are presses; only the middle one is a state.
+      h('div', { className: 'omamusic-transport' },
+        h('button', {
+          type: 'button',
+          className: 'omamusic-tb',
+          'aria-label': 'Previous track',
+          title: 'Previous track',
+          'aria-disabled': fromStation ? null : 'true',
+          onClick: function () {
+            if (dragMoved.current) return
+            go(-1)
+          },
+        }, glyphIcon('prev')),
+        h('button', {
+          type: 'button',
+          className: 'omamusic-tb omamusic-tb-play',
+          'aria-label': playing ? 'Pause' : 'Play',
+          title: playing ? 'Pause' : 'Play',
+          onClick: function () {
+            if (dragMoved.current) return
+            toggle()
+          },
+        }, transportIcon(playing)),
+        h('button', {
+          type: 'button',
+          className: 'omamusic-tb',
+          'aria-label': 'Next track',
+          title: 'Next track',
+          'aria-disabled': fromStation ? null : 'true',
+          onClick: function () {
+            if (dragMoved.current) return
+            go(1)
+          },
+        }, glyphIcon('next'))))
   }
 
   ctx.effect(function () {

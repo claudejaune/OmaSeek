@@ -1,200 +1,206 @@
 /**
  * OmaMusic — the Omarchy site's music card. Node half.
  *
- * Serves the track this machine has — the MP3, and optionally its album art
- * and an analysed spectrum timeline — to this package's browser half over two
- * Connection Fetch routes.
+ * Serves the station to this package's browser half over one Connection Fetch
+ * route: `/api/omaseek.music.tracks`, the catalogue of songs.
  *
- * None of those files are distributed with the package: the track omarchy.org
- * plays is Kevin Koontz's, and it is not ours to ship. Point
- * `OMASEEK_MUSIC_PATH` at a file of your own instead; the art and timeline are
- * optional extras beside it.
+ * The songs themselves are never distributed with the package. They are the
+ * community's, hosted by Omarchy Radio, and the card streams them from there:
+ * the catalogue hands back the playlist's own `file` names resolved against
+ * `https://radio.omarchy.org/tracks/`, and the browser reads those URLs
+ * directly. The station answers them with `access-control-allow-origin: *`
+ * and `accept-ranges: bytes`, which is what lets the card seek inside a song
+ * and read it through the analyser without a proxy in the middle.
  *
- * `/api/omaseek.music.chunk` answers a byte range as `audio/mpeg`, so the
- * browser half reads an `ArrayBuffer` and never pays a base64 third, and the
- * carrier authenticates the request before the plugin sees it.
+ * The playlist is fetched live so a song submitted tomorrow plays today, with
+ * the copy in `src/playlist.json` as the answer when the network is not there.
+ * The only thing added to the station's own answer is the picture the card
+ * wears, which is the same picture for every song.
  *
- * `fs` is an optional Service: a host that mounts one serves the files through
- * its own sandbox, and a host that does not gets the Node builtin reading the
- * copy sitting next to this module. Either way a missing track is a quiet
- * answer, not a boot failure — the card reports it.
+ * `fs` is an optional Service: a host that mounts one reads through its own
+ * sandbox, and a host that does not gets the Node builtin reading the file
+ * sitting next to this module. A picture that cannot be read is a quiet
+ * answer, not a boot failure.
  */
 import { fileURLToPath } from 'node:url'
-import { fileSize, readBytes, readText } from './files.js'
-
-/** The cover art ships with the package. */
-const ART_URL = new URL('../art/cover.webp', import.meta.url)
-
-/** The single track, exactly as omarchy.org ships it on its home page. */
-const TRACK = {
-  title: 'We Can Fix Everything (The Ultimate Machine)',
-  artist: 'Kevin Koontz',
-}
-
-/** The station that hosts the track, streamed from there rather than shipped. */
-const RADIO_TRACK = 'https://radio.omarchy.org/tracks/'
-  + 'kevin-koontz-we-can-fix-everything-the-ultimate-machine.mp3'
-
-/** A setting, or nothing when it is unset or blank. */
-function envValue(name) {
-  const value = process.env[name]
-  if (value === undefined || value.trim() === '') return undefined
-  return value.trim()
-}
+import { readBytes, readText } from './files.js'
 
 /**
- * The track to stream. `OMASEEK_MUSIC_URL` points the card somewhere else; with
- * no setting it plays the station's own copy of this track.
+ * The one picture the card wears, for every song.
+ *
+ * It is the Omarchy mark and nothing else. The station's songs almost never
+ * carry cover art of their own — one file in thirty-three has a picture in its
+ * ID3 tag — so looking one up per track was machinery that answered "no"
+ * nearly every time. The card shows this instead, always.
  */
-function trackUrl() {
-  return envValue('OMASEEK_MUSIC_URL') === undefined ? RADIO_TRACK : envValue('OMASEEK_MUSIC_URL')
-}
+const LOGO_URL = new URL('../art/omarchy.png', import.meta.url)
+
+/** The station: where its songs live, and the playlist that names them. */
+const RADIO_HOME = 'https://radio.omarchy.org/'
+const TRACKS_DIR = RADIO_HOME + 'tracks/'
+const PLAYLIST_URL = TRACKS_DIR + 'playlist.json'
+
+/** The playlist to fall back on: the same file, kept beside this module. */
+const BUNDLED_PLAYLIST = new URL('./playlist.json', import.meta.url)
+
+/** How long a fetched playlist is trusted before the station is asked again. */
+const PLAYLIST_TTL = 10 * 60 * 1000
+
+/** How long the station gets to answer before the bundled playlist wins. */
+const PLAYLIST_TIMEOUT = 8000
 
 /**
- * A local file to play instead of streaming, when `OMASEEK_MUSIC_PATH` names
- * one. The card reads it in windows over the chunk route.
+ * The whole station, newest submission included, out of the playlist the site
+ * publishes. Text in, shapes out, so the bundled copy and the fetched one are
+ * the same reading of the same file.
  */
-function trackPath() {
-  return envValue('OMASEEK_MUSIC_PATH')
+function parsePlaylist(text) {
+  const data = JSON.parse(text)
+  const tracks = Array.isArray(data.tracks) ? data.tracks : []
+  return {
+    station: typeof data.station === 'string' ? data.station : 'omarchy',
+    name: typeof data.name === 'string' ? data.name : 'Omarchy',
+    tracks: tracks
+      .filter((track) => track && typeof track.title === 'string' && track.title !== '')
+      .map((track) => ({
+        title: track.title,
+        artist: typeof track.artist === 'string' ? track.artist : '',
+        file: typeof track.file === 'string' ? track.file : '',
+        explicit: track.explicit === true,
+      })),
+  }
 }
-
-/** The analysed spectrum, for a local file that has one beside it. */
-function timelinePath() {
-  const override = envValue('OMASEEK_MUSIC_TIMELINE')
-  if (override !== undefined) return override
-  const local = trackPath()
-  if (local === undefined) return undefined
-  return local.replace(/\.[^./\\]+$/, '') + '.json'
-}
-
-/** Max bytes one `music.chunk` request may ask for. */
-const CHUNK_MAX = 1 << 20
 
 /**
  * The plugin's entry point: register this package's routes on the browser
  * connection.
  *
- * Both routes hang off `ctx.inject` rather than a guard: this apply runs while
+ * All three hang off `ctx.inject` rather than a guard: this apply runs while
  * the composition is still assembling, so `ctx.get('connection')` at that
- * moment reads an empty registry and neither route would ever appear. The
- * injected scope attaches them when a connection exists and disposes with the
- * fiber; a host with no browser half never runs the callback at all.
+ * moment reads an empty registry and no route would ever appear. The injected
+ * scope attaches them when a connection exists and disposes with the fiber; a
+ * host with no browser half never runs the callback at all.
  */
 export function apply(host) {
   host.inject(['connection'], function (ctx) {
-    registerMetaRoute(ctx)
-    registerChunkRoute(ctx)
+    /** One catalogue per process, shared by every request. See `catalogue`. */
+    registerTracksRoute(ctx, createCatalogue(ctx))
   })
 }
 
-/** One round trip for everything small: what plays, its art, its timeline. */
-function registerMetaRoute(ctx) {
-  /**
-   * The heavy half — art, timeline, transport glyphs — read once, because it is
-   * the shipped assets and cannot change under a running process.
-   *
-   * The size is deliberately *not* cached: it is one `stat` on the request
-   * path, and caching it would let the meta and the chunk route disagree the
-   * moment someone points `OMASEEK_MUSIC_PATH` at a file, or replaces one.
-   * Nothing is cached for a missing track either, so dropping a file in place
-   * is picked up by the next page load instead of needing a plugin reload.
-   */
-  let heavy = null
+/**
+ * The station's playlist.
+ *
+ * The fetch is cached for ten minutes and the last good answer is kept for
+ * good: a station that is briefly unreachable, or slow past its timeout, must
+ * not empty a card that was playing a moment ago. Concurrent callers share one
+ * fetch rather than each starting their own.
+ */
+function createCatalogue(ctx) {
+  let cached = null
+  let fetchedAt = 0
+  let inFlight = null
+  /** The mark, as a data URL: a shipped file, so it is read once per process. */
+  let logo = null
 
-  async function metaOnce() {
-    const local = trackPath()
-    const size = local === undefined ? 0 : await fileSize(ctx, local)
-    if (local !== undefined && size === 0) {
-      console.error('omaseek: no music file at ' + local + ' — the card will say so')
-      return { title: TRACK.title, artist: TRACK.artist, url: '', size: 0, art: '', timeline: null, icons: null }
+  async function logoDataUrl() {
+    if (logo !== null) return logo
+    logo = ''
+    try {
+      const bytes = await readBytes(ctx, fileURLToPath(LOGO_URL), undefined, 1 << 20)
+      logo = 'data:image/png;base64,' + Buffer.from(bytes).toString('base64')
+    } catch (missing) {
+      // No picture at all: the card's ring pulses over an empty plate, which
+      // is what it did before there was a mark to draw.
     }
-    if (heavy === null) {
-      // Art is ours to ship; the timeline is an analysis of one particular file,
-      // so it is optional and only read when there is a local file to match it.
-      let art = ''
-      try {
-        const artBytes = await readBytes(ctx, fileURLToPath(ART_URL), undefined, 1 << 20)
-        art = 'data:image/webp;base64,' + Buffer.from(artBytes).toString('base64')
-      } catch (missing) {
-        // No art: the card's ring pulses over an empty plate.
-      }
-      let timeline = null
-      const analysis = timelinePath()
-      if (analysis !== undefined) {
-        try {
-          timeline = JSON.parse(await readText(ctx, analysis))
-        } catch (missing) {
-          // No analysis: the meter reads the live audio instead of the timeline.
-        }
-      }
-      heavy = {
-        title: TRACK.title,
-        artist: TRACK.artist,
-        art: art,
-        timeline: timeline,
-        icons: null,
-      }
-      console.log('omaseek: serving "' + TRACK.title + '"')
-    }
-    // One of the two: a local file the chunk route feeds, or a URL the browser
-    // streams from. Never both.
-    const source = local === undefined
-      ? { url: trackUrl(), size: 0 }
-      : { url: '', size: size }
-    return Object.assign({}, heavy, source)
+    return logo
   }
 
+  /** The playlist from the station, or the copy beside this module. */
+  async function readPlaylist() {
+    const bundled = parsePlaylist(await readText(ctx, fileURLToPath(BUNDLED_PLAYLIST)))
+    try {
+      const response = await fetch(PLAYLIST_URL, {
+        headers: { accept: 'application/json' },
+        signal: AbortSignal.timeout(PLAYLIST_TIMEOUT),
+      })
+      if (!response.ok) throw new Error('playlist responded ' + response.status)
+      const live = parsePlaylist(await response.text())
+      // A playlist that parses but names nothing is not an answer worth
+      // keeping: the bundled one still is.
+      if (live.tracks.length > 0) return live
+      throw new Error('playlist named no tracks')
+    } catch (error) {
+      const message = String((error && error.message) || error)
+      console.log('omaseek: reading the bundled playlist — ' + message)
+      return bundled
+    }
+  }
+
+  /**
+   * The tracks, ready to play: the station's address for each one, and the art
+   * this package holds for it. `refresh` skips the cache, which is what the
+   * card's own reload asks for.
+   */
+  async function get(refresh) {
+    const now = Date.now()
+    if (!refresh && cached !== null && now - fetchedAt < PLAYLIST_TTL) return cached
+    if (inFlight !== null) return inFlight
+    inFlight = (async function () {
+      const playlist = await readPlaylist()
+      // Read once, before the loop: every track wears the same picture, so
+      // there is nothing per-track to resolve.
+      const art = await logoDataUrl()
+      const tracks = []
+      for (const track of playlist.tracks) {
+        tracks.push(trackRecord({
+          title: track.title,
+          artist: track.artist,
+          file: track.file,
+          url: TRACKS_DIR + encodeURIComponent(track.file),
+          art: art,
+          explicit: track.explicit,
+        }))
+      }
+      cached = { station: playlist.station, name: playlist.name, tracks: tracks }
+      fetchedAt = Date.now()
+      console.log('omaseek: serving ' + tracks.length + ' tracks from ' + playlist.name)
+      return cached
+    })()
+    try {
+      return await inFlight
+    } finally {
+      inFlight = null
+    }
+  }
+
+  return { get: get, logoDataUrl: logoDataUrl }
+}
+
+/**
+ * The station, in one answer: every track with its address and its art. This
+ * is what the card builds its transport around.
+ */
+function registerTracksRoute(ctx, catalog) {
   ctx.effect(function () {
     return ctx.connection.fetch.register({
-      path: '/api/omaseek.music.meta',
+      path: '/api/omaseek.music.tracks',
       methods: ['GET'],
       requestBody: 'buffered',
-      fetch: async function () {
+      fetch: async function (request) {
         try {
-          return Response.json(await metaOnce(), { headers: { 'cache-control': 'no-store' } })
+          const refresh = new URL(request.url).searchParams.get('refresh') !== null
+          const list = await catalog.get(refresh)
+          // The card's own reload wants the station as it is now, so a refresh
+          // is answered from no cache at all — in either direction.
+          const headers = { 'cache-control': refresh ? 'no-store' : 'private, max-age=60' }
+          return Response.json(list, { headers: headers })
         } catch (error) {
           const message = String((error && error.message) || error)
-          console.error('omaseek: music meta failed — ' + message)
+          console.error('omaseek: music tracks failed — ' + message)
           return Response.json({ error: message }, { status: 500 })
         }
       },
     })
-  }, 'omaseek: music meta route')
-}
-
-/** The mp3 in windows: [offset, offset + length), as raw bytes. */
-function registerChunkRoute(ctx) {
-  ctx.effect(function () {
-    return ctx.connection.fetch.register({
-      path: '/api/omaseek.music.chunk',
-      methods: ['GET'],
-      requestBody: 'buffered',
-      fetch: async function (request) {
-        const query = new URL(request.url).searchParams
-        // A missing or blank parameter is a malformed request, not offset 0:
-        // `Number(null)` is 0, which would answer the first megabyte of the
-        // track to a request that never asked for a window.
-        const rawOffset = query.get('offset')
-        const rawLength = query.get('length')
-        const offset = Number(rawOffset)
-        if (rawOffset === null || rawOffset.trim() === '' || !Number.isInteger(offset) || offset < 0) {
-          return Response.json({ error: 'bad chunk offset' }, { status: 400 })
-        }
-        let length = Number(rawLength)
-        if (rawLength === null || rawLength.trim() === ''
-            || !Number.isInteger(length) || length <= 0 || length > CHUNK_MAX) {
-          length = CHUNK_MAX
-        }
-        try {
-          const bytes = await readBytes(ctx, trackPath(), offset, length)
-          return new Response(bytes, {
-            headers: { 'content-type': 'audio/mpeg', 'content-length': String(bytes.length) },
-          })
-        } catch (error) {
-          const message = String((error && error.message) || error)
-          return Response.json({ error: message }, { status: 404 })
-        }
-      },
-    })
-  }, 'omaseek: music chunk route')
+  }, 'omaseek: music tracks route')
 }

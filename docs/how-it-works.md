@@ -95,33 +95,46 @@ phrase per load and stops.
 
 ### OmaMusic
 
-The site's now-playing card: the browser half plays the track through an `Audio` element and
-paints the spectrum the card animates.
+The site's now-playing card, playing **the whole station**: the browser half streams whatever
+song is up through one `Audio` element, paints the spectrum the card animates, and walks the
+list with the deck's own transport — back, play, forward.
 
-**It streams the track from the station that hosts it** —
-`radio.omarchy.org/tracks/kevin-koontz-we-can-fix-everything-the-ultimate-machine.mp3`, which
-serves it with CORS open (so the meter can read the audio) and range requests (so seeking
-works). No audio ships with this package; the cover art does.
+**The catalogue is the station's playlist.** The Node half fetches
+`radio.omarchy.org/tracks/playlist.json` — the same file the site is built from, so a song
+submitted tomorrow plays today — caches it for ten minutes, and falls back on the copy kept in
+`src/playlist.json` when the network is not there. Each track comes back with the station's own
+address for its bytes.
 
-```sh
-OMASEEK_MUSIC_URL=https://example.com/other-track.mp3   # stream something else
-OMASEEK_MUSIC_PATH=~/Music/track.mp3                    # …or play a local file instead
-OMASEEK_MUSIC_TIMELINE=~/Music/track.json               # analysed spectrum, for a local file
-```
+**It streams from the station that hosts the songs.** Every track is served with CORS open (so
+the meter can read the audio) and range requests (so seeking works). No audio ships with this
+package, and there is no way to point the card at anything else: it plays the station, or it
+says why it cannot.
 
-A local file wins over the URL: the Node half reads it in windows and stitches them into a
-blob. The cover art ships with the package. The analysed timeline belongs to one particular
-file, so it is used only for a local file (or when one is named outright) — the station's copy
-is a different master. Without a timeline the meter follows the live audio and the duration
-comes off the file itself.
+The transport is the deck's: prev and play and next, the site's stepped bitmaps, and the queue
+wraps at both ends. A song that ends walks on into the next one *if the listener had it playing*
+— a song ending is not a reason to start making noise — and a track picked by hand always
+sounds, because a press on next that played nothing would be a control that does nothing. A
+track that fails while the card was the one choosing it is walked past once; past that, a
+station that is down simply fails rather than running the whole list past the listener.
+
+### One picture, for every song
+
+The card wears the Omarchy mark, and every song wears the same one. That is a decision, not a
+shortcut: of the thirty-three songs in the station's playlist, exactly **one** has a picture in
+its ID3 tag. Resolving art per track cost a map, an extracted JPEG, and a lookup that answered
+"no" thirty-two times in thirty-three, so it was taken back out. `art/omarchy.png` is the whole
+of the card's artwork.
+
+It is not per-song art that is the exception — it is art at all. A song submitted next month with
+a beautiful cover of its own will wear the mark like the rest.
 
 A stream needs the host to allow cross-origin reads for the meter; if it does not, the card
 retries without CORS, plays the sound, and leaves the meter flat. Everything else that can go
-wrong is said on the card rather than thrown: no network, an unreachable station, a missing
-file, or nothing configured at all. The play button stays live, so it can be pressed again
+wrong is said on the card rather than thrown: no network, an unreachable station, a song that is
+not there, or nothing configured at all. The play button stays live, so it can be pressed again
 once the network is back.
 
-`packages/omaseek-music/assets/music/` in this checkout keeps a local copy of the track for
+`packages/omaseek-music/assets/music/` in this checkout keeps a local copy of a track for
 development, untracked.
 
 ## Layout of the seam
@@ -133,8 +146,8 @@ A browser half reaches the page and the Node process through two seams:
 - **Browser → Node** goes over the Connection Fetch bridge:
   `ctx.connection.fetch.register({ path: '/api/omaseek.…', … })` on the Node half, an
   ordinary same-origin `fetch()` in the browser half. The themes plugin serves
-  `/api/omaseek.themes`; the music plugin serves `/api/omaseek.music.meta` and
-  `/api/omaseek.music.chunk`; the hero needs no Node half at all. The carrier authenticates and fences
+  `/api/omaseek.themes`; the music plugin serves `/api/omaseek.music.tracks`, the station's
+  catalogue; the hero needs no Node half at all. The carrier authenticates and fences
   `/api/*` before the plugin sees the request, so the plugin adds no auth of its own. Routes
   must live under `/api/` with segments matching `^[A-Za-z0-9_$.-]+$`.
 

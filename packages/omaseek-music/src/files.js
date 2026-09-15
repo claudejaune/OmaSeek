@@ -1,7 +1,7 @@
 /**
  * The one place this package touches the machine's files.
  *
- * The `fs` Service is tried first because a host that mounts one serves paths
+ * The `fs` Service is tried first because a host that mounts one reads paths
  * through the execution world's policy; the Node builtin is only a fallback for
  * the case the service was never meant to answer — a file that is not there.
  *
@@ -12,7 +12,7 @@
  * file" codes fall through, and anything else is rethrown to the caller, which
  * reports it.
  */
-import { open, readFile, stat } from 'node:fs/promises'
+import { open, readFile } from 'node:fs/promises'
 
 /** Service/builtin codes that mean "this host has no such file". */
 const MISSING = new Set(['FS_NOT_FOUND', 'FS_NOT_REGULAR_FILE', 'ENOENT', 'ENOTDIR'])
@@ -60,25 +60,5 @@ export async function readBytes(ctx, path, offset, length) {
     return new Uint8Array(buffer.buffer, buffer.byteOffset, read.bytesRead)
   } finally {
     await handle.close()
-  }
-}
-
-/** A file's size, or 0 when this host has no such file. */
-export async function fileSize(ctx, path) {
-  const fileSystem = ctx.get('fs')
-  if (fileSystem !== undefined) {
-    try {
-      const target = await fileSystem.resolve(path)
-      const info = await fileSystem.stat(target)
-      if (info !== undefined && typeof info.size === 'number') return info.size
-    } catch (error) {
-      if (!mayFallBack(error)) throw error
-    }
-  }
-  try {
-    const info = await stat(path)
-    return info.size
-  } catch (missing) {
-    return 0
   }
 }

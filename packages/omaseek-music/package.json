@@ -1,7 +1,7 @@
 {
   "name": "omaseek-music",
-  "version": "0.1.1",
-  "description": "Omarchy's now-playing card for DeepSeek Harness, over a track you point it at",
+  "version": "0.2.0",
+  "description": "Omarchy Radio for DeepSeek Harness: the station card, every song in the playlist, back/play/forward",
   "type": "module",
   "license": "MIT",
   "author": "claudejaune (https://github.com/claudejaune)",
