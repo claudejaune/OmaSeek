@@ -885,6 +885,19 @@ export function applyFeature(host) {
           onPointerCancel: function () { scrubbing.current = false },
           onLostPointerCapture: function () { scrubbing.current = false },
           onInput: function (event) { onScrub(Number(event.currentTarget.value)) },
+          // A range input answers a drag and the arrow keys, but a plain press
+          // on the track leaves its value where it was — so the line would look
+          // seekable everywhere and only work under a finger that kept moving.
+          // Where the press landed is the position asked for, worked out from
+          // the element's own box so a card that has been dragged still seeks
+          // where it was pressed.
+          onClick: function (event) {
+            var range = event.currentTarget
+            var box = range.getBoundingClientRect()
+            if (box.width <= 0) return
+            var at = Math.max(0, Math.min(1, (event.clientX - box.left) / box.width))
+            onScrub(Math.round(at * Number(range.max)))
+          },
         })),
       // The deck's own transport, in the same order: back, play, forward.
       // prev and next are presses; only the middle one is a state.

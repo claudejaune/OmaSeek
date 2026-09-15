@@ -54,7 +54,9 @@ function fakeElement() {
     closest() { return null },
     addEventListener() {},
     removeEventListener() {},
-    getBoundingClientRect() { return { width: 0, height: 0, left: 0, top: 0, right: 0, bottom: 0 } },
+    // A box with a width, because the card seeks by working the position out
+    // of the element it was pressed on. An empty box would be no press at all.
+    getBoundingClientRect() { return { width: 200, height: 14, left: 0, top: 0, right: 200, bottom: 14 } },
   }
   return element
 }
@@ -245,6 +247,19 @@ const LONE = {
   }],
 }
 
+/** A station whose one title is longer than the card can show in full. */
+const LONG_TITLES = {
+  station: 'omarchy',
+  name: 'Omarchy',
+  tracks: [{
+    title: 'The Card Has To Shorten This Because It Is Long',
+    artist: 'An Artist With A Long Name',
+    file: 'long.mp3',
+    url: 'https://radio.example/tracks/long.mp3',
+    art: '', explicit: false, size: 0, timeline: null,
+  }],
+}
+
 /** A station that answered and had nothing to play. */
 const EMPTY = { station: 'omarchy', name: 'Omarchy', tracks: [] }
 
@@ -310,6 +325,20 @@ const PACKAGES = [
       {
         label: 'a song ending plays the next one', tracks: STATION, play: true, audio: 'ok',
         expectFailure: null, end: true, expectTrack: 'Second Song',
+      },
+      {
+        // The progress line is seekable by pressing it, not only by dragging.
+        // Halfway along a three-and-a-half minute song is 1:45, and what says
+        // so is where the media element was sent.
+        label: 'the progress line seeks where it is pressed', tracks: STATION,
+        play: true, audio: 'ok', seekAt: 100, expectSeek: 105,
+      },
+      {
+        // The full names live in the hover tooltip, which is the only place a
+        // title the card has to shorten is written out in full.
+        label: 'the tooltip carries the whole title', tracks: LONG_TITLES,
+        expectTrack: 'The Card Has To Shorten This Because It Is Long',
+        expectText: 'The Card Has To Shorten…',
       },
       {
         label: 'the station is not there', tracks: null, play: true,
@@ -644,6 +673,33 @@ async function runCase(pkg, testCase) {
     else {
       element.emit('ended')
       await new Promise((done) => setTimeout(done, 30))
+    }
+  }
+
+  // A press on the progress line, partway along it. The fake line is 200px
+  // wide, so a press at 100 lands halfway through the song — which is what the
+  // media element should have been sent to. The readout itself is painted by
+  // the card's frame loop rather than rendered by React, so the position is
+  // read off the element the card is actually driving.
+  if (testCase.seekAt !== undefined) {
+    const line = nodes.find((node) => node.props['aria-label'] === 'Position in the track'
+      && typeof node.props.onClick === 'function')
+    if (line === undefined) problems.push('no progress line on the card')
+    else {
+      if (lastAudio !== null) lastAudio.currentTime = 0
+      const box = { width: 200, height: 14, left: 0, top: 0, right: 200, bottom: 14 }
+      try {
+        line.props.onClick({ clientX: testCase.seekAt, currentTarget: { max: '1000', getBoundingClientRect: () => box } })
+      } catch (error) {
+        problems.push(`pressing the progress line threw: ${error.message}`)
+      }
+      await new Promise((done) => setTimeout(done, 5))
+      if (testCase.expectSeek !== undefined) {
+        const landed = lastAudio === null ? null : lastAudio.currentTime
+        if (landed !== testCase.expectSeek) {
+          problems.push(`the press sought to ${landed}, expected ${testCase.expectSeek}`)
+        }
+      }
     }
   }
 
