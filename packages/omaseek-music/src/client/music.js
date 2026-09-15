@@ -267,6 +267,8 @@ export function applyFeature(host) {
   var peakArr = new Float32Array(BANDS)
   for (var p = 0; p < BANDS; p += 1) peakArr[p] = 0.3
 
+  /** Which start() attempt is the current one. See `start`. */
+  var attempt = 0
   /** paused | loading | playing | failed. */
   var state = 'paused'
   /** Why the card is not playing, when it is not. */
@@ -497,25 +499,43 @@ export function applyFeature(host) {
    * resumes from where it was paused, picking up the silent clock if it has
    * never sounded; one that has just taken over starts from its own top.
    */
+  /**
+   * Bring the sound up on the track that is up: what a press on play, on next
+   * or on an ended song all end in.
+   *
+   * Every attempt carries a number, and only the newest one may report
+   * anything. Pressing play and then pause, or next twice in quick
+   * succession, aborts the request the earlier press started — the browser
+   * answers that with "play() request was interrupted by a call to pause()" —
+   * and an abandoned attempt must not be read as a track that failed. It was:
+   * the card went to failed with nothing to say, leaving a blank, silent,
+   * apparently broken card with no message and no way back.
+   */
   function start(keepEnded) {
     var track = current()
+    attempt += 1
+    var mine = attempt
     state = 'loading'
     if (failure !== 'The track could not be reached') failure = ''
     announce()
     var ready = audio === null ? prepare(track) : Promise.resolve()
     ready.then(function () {
-      if (disposed) return
+      // A newer press owns the card now; this attempt is over, and quietly.
+      if (disposed || mine !== attempt) return
       if (audio === null) wire()
       else if (trackSrc !== source()) load(track, keepEnded)
       if (audioContext.state !== 'running') return audioContext.resume()
     }).then(function () {
-      if (disposed) return
+      if (disposed || mine !== attempt) return
       if (audio.currentTime === 0 && duration > 0) audio.currentTime = clockPosition(performance.now())
       return audio.play()
-    }).catch(function () {
-      // Paused again before it started: that is not a failure.
+    }).catch(function (error) {
+      if (disposed || mine !== attempt) return
+      // An interrupted play is a play that is no longer wanted, not a failure.
+      if (error !== null && error !== undefined && error.name === 'AbortError') return
       if (state === 'loading') {
         state = 'failed'
+        if (failure === '') failure = 'The track could not be played'
         announce()
       }
     })
@@ -608,14 +628,8 @@ export function applyFeature(host) {
     clockZero = performance.now() - at * 1000
   }
 
-  // The catalogue's arrival boots the silent clock, exactly as the site's
-  // loadMusic() does on page paint. The station's own playlist is what the
-  // card walks through, in the order the site plays it.
-  //
-  // Both routes are asked at once and the two answers are settled together,
-  // because they are one question — what is this card going to play — and
-  // announcing them one at a time let a failing fallback say "no track" over
-  // the station's own failure.
+  // The catalogue's arrival is what the card walks through: the station's own
+  // playlist, in the order the site plays it.
   ctx.effect(function () {
     var alive = true
 

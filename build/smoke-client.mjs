@@ -156,6 +156,13 @@ class FakeAudio {
       this.emit('loadedmetadata')
       this.emit('playing')
     }, 0)
+    // A play that a pause overtakes answers this way, and it is not a failure:
+    // the browser is saying the request is no longer wanted.
+    if (audioMode === 'interrupted') {
+      const abort = new Error('play() request was interrupted by a call to pause()')
+      abort.name = 'AbortError'
+      return Promise.reject(abort)
+    }
     return Promise.resolve()
   }
 }
@@ -347,6 +354,14 @@ const PACKAGES = [
         // thing the stylesheet hangs the swap on.
         label: 'the byline swaps to the clock on the seek line', tracks: STATION,
         play: true, audio: 'ok', seekHover: true, expectSeekFlag: '1',
+      },
+      {
+        // A play the browser abandons because something newer took over. The
+        // card must not read that as a track that failed: it used to, and the
+        // card was left blank and silent with nothing to say.
+        label: 'an interrupted play is not a failure', tracks: STATION,
+        play: true, audio: 'interrupted', expectFailure: null,
+        expectText: 'First Song',
       },
       {
         label: 'the station is not there', tracks: null, play: true,
