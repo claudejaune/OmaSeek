@@ -53,7 +53,64 @@ for (const dir of packages) {
     problems.push(`${manifest.name}: lib/client.js is missing — run \`pnpm build\``)
     continue
   }
-  console.log(`omaseek: ${manifest.name} — ${main} exports apply(), bundle present`)
+
+  /**
+   * Mount the half the way cordis does and see what it registers.
+   *
+   * A host half that imports cleanly can still be broken: the browser-half
+   * suite never runs it, so a route that throws in its own body — or a name
+   * that no longer exists anywhere — passes every check there is and fails on
+   * the first real request. That is exactly what happened with the music
+   * plugin's station route, which answered 500 for days with twenty-one green
+   * cases behind it.
+   */
+  const routes = []
+  const ctx = {
+    get: () => undefined,
+    effect(callback) { return callback() },
+    connection: { fetch: { register(row) { routes.push(row); return () => {} } } },
+    inject(_names, callback) { callback(ctx) },
+  }
+  try {
+    plugin.apply(ctx)
+  } catch (error) {
+    problems.push(`${manifest.name}: apply() threw — ${error.message}`)
+    continue
+  }
+  // A half with no Node-side need registers nothing, which is its right: the
+  // hero was never going to talk to the machine. What is checked is every route
+  // it DID register.
+  if (routes.length === 0) {
+    console.log(`omaseek: ${manifest.name} — ${main} exports apply(), no routes (fine)`)
+    continue
+  }
+
+  // The one route that talks to the outside world: ask it for real, so a route
+  // that is registered but throws on its own first line fails here rather than
+  // in front of whoever installed the plugin.
+  const station = routes.find((row) => row.path.endsWith('.music.tracks'))
+  if (station !== undefined) {
+    try {
+      const response = await station.fetch({ url: 'http://check/api/omaseek.music.tracks' })
+      const body = await response.json()
+      if (response.status !== 200) {
+        problems.push(`${manifest.name}: ${station.path} answered ${response.status} — ${body.error || ''}`)
+        continue
+      }
+      if (!Array.isArray(body.tracks) || body.tracks.length === 0) {
+        problems.push(`${manifest.name}: ${station.path} listed no tracks`)
+        continue
+      }
+      console.log(`omaseek: ${manifest.name} — ${main} exports apply(), ${routes.length} route(s), `
+        + `${body.tracks.length} tracks served`)
+      continue
+    } catch (error) {
+      problems.push(`${manifest.name}: ${station.path} threw — ${error.message}`)
+      continue
+    }
+  }
+
+  console.log(`omaseek: ${manifest.name} — ${main} exports apply(), ${routes.length} route(s)`)
 }
 
 if (problems.length > 0) {

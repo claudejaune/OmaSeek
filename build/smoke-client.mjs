@@ -365,7 +365,7 @@ const PACKAGES = [
       },
       {
         label: 'the station is not there', tracks: null, play: true,
-        expectFailure: 'The station could not be loaded',
+        expectFailure: 'The station: omaseek: /api/omaseek.music.tracks responded 500',
       },
       {
         label: 'the station is there and the song is not', tracks: STATION, play: true, audio: 'error',
@@ -379,13 +379,13 @@ const PACKAGES = [
       {
         // The station answered and had nothing in it.
         label: 'nothing to play', tracks: EMPTY, play: true,
-        expectFailure: 'No track is set',
+        expectFailure: 'The station: the station listed no tracks',
       },
       {
         // A host with no catalogue route at all — an older build — leaves the
         // card with nothing to play, and it says so rather than failing oddly.
         label: 'a host with no catalogue route', tracks: 404, play: true,
-        expectFailure: 'The station could not be loaded',
+        expectFailure: 'The station: omaseek: /api/omaseek.music.tracks responded 404',
       },
     ],
   },
@@ -787,7 +787,7 @@ async function runCase(pkg, testCase) {
   if (testCase.expectFailure !== undefined) {
     const said = texts()
     if (testCase.expectFailure === null) {
-      const wrong = said.filter((text) => /could not|No track is set/.test(text))
+      const wrong = said.filter((text) => /could not|No track is set|The station:/.test(text))
       if (wrong.length > 0) problems.push(`the card reports a failure it should not: ${wrong.join(', ')}`)
     } else if (!said.includes(testCase.expectFailure)) {
       problems.push(`the card does not say "${testCase.expectFailure}" (it says: ${said.join(' | ')})`)

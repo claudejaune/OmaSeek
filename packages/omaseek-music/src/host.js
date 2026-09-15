@@ -151,17 +151,14 @@ function createCatalogue(ctx) {
       // Read once, before the loop: every track wears the same picture, so
       // there is nothing per-track to resolve.
       const art = await logoDataUrl()
-      const tracks = []
-      for (const track of playlist.tracks) {
-        tracks.push(trackRecord({
-          title: track.title,
-          artist: track.artist,
-          file: track.file,
-          url: TRACKS_DIR + encodeURIComponent(track.file),
-          art: art,
-          explicit: track.explicit,
-        }))
-      }
+      const tracks = playlist.tracks.map((track) => ({
+        title: track.title,
+        artist: track.artist,
+        file: track.file,
+        url: TRACKS_DIR + encodeURIComponent(track.file),
+        art: art,
+        explicit: track.explicit,
+      }))
       cached = { station: playlist.station, name: playlist.name, tracks: tracks }
       fetchedAt = Date.now()
       console.log('omaseek: serving ' + tracks.length + ' tracks from ' + playlist.name)

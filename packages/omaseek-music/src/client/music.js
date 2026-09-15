@@ -644,13 +644,14 @@ export function applyFeature(host) {
       announce()
     }
 
-    function showNothing(stationFailed) {
+    function showNothing(why) {
       meta = null
       state = 'failed'
-      // The one half that was asked, and whether it answered. A station that
-      // could not be read is a station problem; a station that answered with
-      // nothing to play is a track problem.
-      failure = stationFailed ? 'The station could not be loaded' : 'No track is set'
+      // What the half that answered actually said. A card that only says it
+      // could not load leaves whoever is looking at it — and whoever wrote it —
+      // with nothing to go on; the reason the fetch gave is worth more than the
+      // sentence we would have written for it.
+      failure = why === '' ? 'The station could not be loaded' : 'The station: ' + why
       console.error('omamusic: ' + failure)
       announce()
     }
@@ -663,14 +664,16 @@ export function applyFeature(host) {
       try {
         showStation(result)
       } catch (empty) {
-        console.error('omamusic: ' + String((empty && empty.message) || empty))
+        var said = String((empty && empty.message) || empty)
+        console.error('omamusic: ' + said)
         if (!alive) return
-        showNothing(false)
+        showNothing(said)
       }
     }).catch(function (error) {
       if (!alive) return
-      console.error('omamusic: ' + String((error && error.message) || error))
-      showNothing(true)
+      var why = String((error && error.message) || error)
+      console.error('omamusic: ' + why)
+      showNothing(why)
     })
 
     return function () {
