@@ -341,6 +341,14 @@ const PACKAGES = [
         expectText: 'The Card Has To Shorten…',
       },
       {
+        // A pointer on the seek line swaps the byline from the artist to the
+        // clock. The readout itself is painted by the card's frame loop rather
+        // than rendered by React, so the proof is the card's own flag — the
+        // thing the stylesheet hangs the swap on.
+        label: 'the byline swaps to the clock on the seek line', tracks: STATION,
+        play: true, audio: 'ok', seekHover: true, expectSeekFlag: '1',
+      },
+      {
         label: 'the station is not there', tracks: null, play: true,
         expectFailure: 'The station could not be loaded',
       },
@@ -474,6 +482,36 @@ function makeServices() {
 
 function jsonResponse(value) {
   return { ok: true, status: 200, async json() { return value } }
+}
+
+/**
+ * Every host element in a rendered tree, children and all. Reading the card
+ * again after an interaction is what shows what the interaction changed.
+ */
+function nodesOf(element) {
+  const found = []
+  const walk = (node) => {
+    if (node === null || node === undefined || typeof node === 'boolean') return
+    if (typeof node === 'string' || typeof node === 'number') return
+    if (Array.isArray(node)) {
+      for (const child of node) walk(child)
+      return
+    }
+    if (node.type === React.Fragment) {
+      for (const child of node.children) walk(child)
+      return
+    }
+    if (typeof node.type === 'function') {
+      walk(node.type(node.props))
+      return
+    }
+    found.push(node)
+    for (const child of node.children) walk(child)
+    const nested = node.props === undefined ? undefined : node.props.children
+    if (nested !== undefined) walk(nested)
+  }
+  walk(element)
+  return found
 }
 
 /** Render every registered component, children and all. */
@@ -663,6 +701,34 @@ async function runCase(pkg, testCase) {
         problems.push(`pressing play threw: ${error.message}`)
       }
       await new Promise((done) => setTimeout(done, 30))
+    }
+  }
+
+  // A pointer on the seek line, which is what swaps the byline to the clock.
+  // The readout is painted by the frame loop rather than rendered by React, so
+  // what is checked is the card's own flag: the thing the stylesheet hangs the
+  // swap on, and the same thing the card sets for itself when `:has()` is not
+  // there to do it.
+  if (testCase.seekHover === true) {
+    const line = nodes.find((node) => node.props['aria-label'] === 'Position in the track'
+      && typeof node.props.onPointerEnter === 'function')
+    if (line === undefined) problems.push('the seek line has no hover handler')
+    else {
+      try {
+        line.props.onPointerEnter({})
+      } catch (error) {
+        problems.push(`hovering the seek line threw: ${error.message}`)
+      }
+      await new Promise((done) => setTimeout(done, 5))
+      const card = calls.registered.find((entry) => entry.options.name === 'shell.overlay')
+      const root = card === undefined ? undefined
+        : nodesOf(React.createElement(card.component, {})).find((node) => node.props !== undefined
+          && typeof node.props.className === 'string'
+          && node.props.className.split(' ').includes('omamusic'))
+      const flag = root === undefined ? undefined : root.props['data-seek']
+      if (flag !== testCase.expectSeekFlag) {
+        problems.push(`the card's seek flag is ${String(flag)}, expected ${String(testCase.expectSeekFlag)}`)
+      }
     }
   }
 

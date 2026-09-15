@@ -32,9 +32,6 @@ var TRACK = {
   artist: 'the station',
 }
 
-/** The station's own address, for the tooltip when a track came from it. */
-var RADIO = 'https://radio.omarchy.org/'
-
 /* Ported analysis constants — src/lib/music.ts of the site. */
 var BANDS = 32
 var LOW_HZ = 50
@@ -105,9 +102,9 @@ var CSS = [
   '.omamusic-readout{position:absolute;inset:0;opacity:0;transition:opacity .15s ease-out}',
   '.omamusic-artist{transition:opacity .15s ease-out}',
   '.omamusic:has(.omamusic-seek:hover) .omamusic-artist,.omamusic:has(.omamusic-seek:active) .omamusic-artist,',
-  '.omamusic:has(.omamusic-seek:focus-visible) .omamusic-artist{opacity:0}',
+  '.omamusic:has(.omamusic-seek:focus-visible) .omamusic-artist,.omamusic[data-seek="1"] .omamusic-artist{opacity:0}',
   '.omamusic:has(.omamusic-seek:hover) .omamusic-readout,.omamusic:has(.omamusic-seek:active) .omamusic-readout,',
-  '.omamusic:has(.omamusic-seek:focus-visible) .omamusic-readout{opacity:1}',
+  '.omamusic:has(.omamusic-seek:focus-visible) .omamusic-readout,.omamusic[data-seek="1"] .omamusic-readout{opacity:1}',
   // The four-level meter, brand-colored, driven per frame outside React.
   '.omamusic-meter{display:flex;align-items:flex-end;gap:2px;box-sizing:content-box;',
   'width:18px;height:12px;flex:none;',
@@ -240,6 +237,10 @@ export function applyFeature(host) {
   var index = 0
   /** Whether the card is meant to be making sound, across track changes. */
   var wantPlaying = false
+  /** Whether a pointer is on the seek line, which swaps the byline to the
+   *  clock. A card of this size has no stateful component to hold it in, and
+   *  the swap is a presentation detail rather than music. */
+  var atSeek = false
 
   var audio = null
   var audioContext = null
@@ -750,7 +751,13 @@ export function applyFeature(host) {
       return function () { cancelAnimationFrame(frame) }
     }, [])
 
-    /** The range moved, by hand or key: show it at once, and go there. */
+    /**
+     * The range moved, by hand or key: show it at once, and go there.
+     *
+     * The readout written here is also what the byline turns into under a
+     * pointer on the seek line; see `onSeekHover` in the card, which hands the
+     * line's own hover to the card so the byline can swap.
+     */
     function onScrub(value) {
       var at = value / 1000
       if (lineRef.current !== null) lineRef.current.style.transform = 'scaleX(' + at + ')'
@@ -758,6 +765,22 @@ export function applyFeature(host) {
         readoutRef.current.textContent = clock(at * duration) + ' / ' + clock(duration)
       }
       seek(at * duration)
+    }
+
+    /**
+     * While a pointer is on the seek line the byline shows the clock instead
+     * of the artist: where the song is, and how long it is.
+     *
+     * The stylesheet does this same swap with `:has()`. This does it by hand
+     * as well, so the swap does not depend on that selector — and so it can be
+     * read off the card in a test rather than only seen on a screen.
+     */
+    function onSeekHover(over) {
+      atSeek = over
+      if (over && readoutRef.current !== null) {
+        readoutRef.current.textContent = clock(timeNow()) + ' / ' + clock(duration)
+      }
+      announce()
     }
 
     // Drag: every pointer but the seek's. Window listeners while a hand
@@ -805,13 +828,10 @@ export function applyFeature(host) {
     var playing = wantPlaying && state !== 'failed'
     var art = meta !== null && typeof meta.art === 'string' ? meta.art : ''
     var fromStation = queue.length > 1
-    // The station's own address for the track that is up, so the card can be
-    // followed back to the song. A file named by hand has none to offer.
-    var link = current() !== null && typeof current().url === 'string'
-      && current().url.indexOf(RADIO) === 0 ? current().url : ''
     return h('div', {
       className: 'omamusic',
       'data-on': on ? '1' : '0',
+      'data-seek': atSeek ? '1' : null,
       ref: cardRef,
       onPointerDown: onPointerDown,
       style: { left: home.current.left + 'px', top: home.current.top + 'px' },
@@ -833,8 +853,7 @@ export function applyFeature(host) {
           h('span', { className: 'omamusic-veil', 'aria-hidden': 'true' }, transportIcon(on))),
         h('span', { className: 'omamusic-tip', 'aria-hidden': 'true' },
           h('span', { className: 'omamusic-tip-title' }, title()),
-          h('span', { className: 'omamusic-tip-artist' }, artist()),
-          fromStation ? h('span', { className: 'omamusic-tip-artist' }, link) : null),
+          h('span', { className: 'omamusic-tip-artist' }, artist())),
         h('span', { className: 'omamusic-text' },
           h('span', { className: 'omamusic-title' },
             state === 'failed' ? failure : shortTitle(title())),
@@ -885,6 +904,9 @@ export function applyFeature(host) {
           onPointerCancel: function () { scrubbing.current = false },
           onLostPointerCapture: function () { scrubbing.current = false },
           onInput: function (event) { onScrub(Number(event.currentTarget.value)) },
+          // The byline swaps to the clock while a pointer is on the line.
+          onPointerEnter: function () { onSeekHover(true) },
+          onPointerLeave: function () { onSeekHover(false) },
           // A range input answers a drag and the arrow keys, but a plain press
           // on the track leaves its value where it was — so the line would look
           // seekable everywhere and only work under a finger that kept moving.
