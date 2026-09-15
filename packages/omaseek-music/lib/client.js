@@ -204,7 +204,7 @@ var CSS = [
   // from song to song. The title is the only thing that gives, and it gives by
   // ellipsis.
   '.omamusic{position:fixed;z-index:2147483000;display:flex;flex-direction:column;align-items:stretch;',
-  'width:348px;box-sizing:border-box;',
+  'width:292px;box-sizing:border-box;',
   'border:1px solid var(--dsw-alias-border-l1);',
   'background:color-mix(in srgb, var(--dsw-alias-bg-base) 85%, transparent);',
   'backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);',
@@ -217,7 +217,8 @@ var CSS = [
   '.omamusic-art{position:relative;width:40px;height:40px;flex:none;align-self:flex-start;padding:0;',
   'border:none;border-right:1px solid var(--dsw-alias-border-l1);background:#000 center/cover no-repeat}',
   // Title over artist; hovering the seek swaps the artist for the readout.
-  '.omamusic-text{display:flex;flex-direction:column;justify-content:center;padding:4px 16px 0 12px;',
+  '.omamusic-text{display:flex;flex-direction:column;justify-content:center;flex:1 1 auto;',
+  'padding:4px 16px 0 12px;',
   'min-width:0;line-height:1.2}',
   '.omamusic-title{font-size:12px;font-weight:500;color:var(--dsw-alias-label-primary);',
   'white-space:nowrap;max-width:34ch;overflow:hidden;text-overflow:ellipsis}',
@@ -282,7 +283,11 @@ var CSS = [
   'color:var(--dsw-alias-label-secondary)}',
   // Where this track sits in the station, when it came from one. It is a
   // label rather than a control, so the press goes to the row underneath.
-  '.omamusic-count{flex:none;align-self:center;padding:0 10px;pointer-events:none;',
+  // One box, whatever the track number. The card's own width is fixed, so a
+  // counter that grows from "9/33" to "10/33" would push the meter sideways;
+  // reserving the widest it ever gets keeps everything to its right still.
+  '.omamusic-count{flex:none;align-self:center;box-sizing:border-box;width:44px;text-align:center;',
+  'padding:0;pointer-events:none;',
   'font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;',
   'color:var(--dsw-alias-label-secondary)}',
 ].join('\n')
