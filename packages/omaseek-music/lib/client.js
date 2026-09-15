@@ -220,7 +220,7 @@ var CSS = [
   '.omamusic[data-on="1"] .omamusic-veil{opacity:0}',
   '.omamusic[data-on="1"]:hover .omamusic-veil,.omamusic[data-on="1"]:focus-within .omamusic-veil{opacity:1}',
   // Title over artist; hovering the seek swaps the artist for the readout.
-  '.omamusic-text{display:flex;flex-direction:column;justify-content:center;padding:0 16px 0 12px;',
+  '.omamusic-text{display:flex;flex-direction:column;justify-content:center;padding:4px 16px 0 12px;',
   'min-width:0;line-height:1.2}',
   '.omamusic-title{font-size:12px;font-weight:500;color:var(--dsw-alias-label-primary);',
   'white-space:nowrap;max-width:34ch;overflow:hidden;text-overflow:ellipsis}',
