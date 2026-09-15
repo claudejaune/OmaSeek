@@ -216,11 +216,6 @@ var CSS = [
   'animation:omamusic-ring 1.8s ease-in-out infinite}',
   '@keyframes omamusic-ring{0%,100%{opacity:1}50%{opacity:.3}}',
   '@media (prefers-reduced-motion: reduce){.omamusic-ring{animation:none}}',
-  '.omamusic-veil{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;',
-  'background:rgba(0,0,0,.45);color:#fff;transition:opacity .15s ease-out}',
-  '.omamusic-veil svg{filter:drop-shadow(0 1px 2px rgba(0,0,0,.7))}',
-  '.omamusic[data-on="1"] .omamusic-veil{opacity:0}',
-  '.omamusic[data-on="1"]:hover .omamusic-veil,.omamusic[data-on="1"]:focus-within .omamusic-veil{opacity:1}',
   // Title over artist; hovering the seek swaps the artist for the readout.
   '.omamusic-text{display:flex;flex-direction:column;justify-content:center;padding:4px 16px 0 12px;',
   'min-width:0;line-height:1.2}',
@@ -333,10 +328,6 @@ function glyphIcon(name) {
     viewBox: '0 0 12 10', width: 12 * SCALE, height: 10 * SCALE,
     fill: 'currentColor', 'shape-rendering': 'crispEdges', 'aria-hidden': 'true',
   }, rects)
-}
-
-function transportIcon(on) {
-  return glyphIcon(on ? 'pause' : 'play')
 }
 
 function applyFeature(host) {
@@ -976,7 +967,6 @@ function applyFeature(host) {
     var fromStation = queue.length > 1
     return h('div', {
       className: 'omamusic',
-      'data-on': on ? '1' : '0',
       'data-seek': atSeek ? '1' : null,
       ref: cardRef,
       onPointerDown: onPointerDown,
@@ -995,8 +985,7 @@ function applyFeature(host) {
             toggle()
           },
         },
-          touched ? null : h('span', { 'aria-hidden': 'true', className: 'omamusic-ring' }),
-          h('span', { className: 'omamusic-veil', 'aria-hidden': 'true' }, transportIcon(on))),
+          touched ? null : h('span', { 'aria-hidden': 'true', className: 'omamusic-ring' })),
         h('span', { className: 'omamusic-tip', 'aria-hidden': 'true' },
           h('span', { className: 'omamusic-tip-title' }, title()),
           h('span', { className: 'omamusic-tip-artist' }, artist())),
@@ -1090,7 +1079,7 @@ function applyFeature(host) {
             if (dragMoved.current) return
             toggle()
           },
-        }, transportIcon(playing)),
+        }, glyphIcon(playing ? 'pause' : 'play')),
         h('button', {
           type: 'button',
           className: 'omamusic-tb',
