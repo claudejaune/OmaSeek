@@ -139,8 +139,8 @@ exports["createNotifier"] = createNotifier
  * which is what lets the card seek inside a song and read it through the
  * analyser without a proxy in the middle.
  *
- * Browsers will not autoplay sound without a gesture, so the card starts
- * paused — ring pulsing, one click from the sound.
+ * Browsers will not autoplay sound without a gesture, so the card starts paused
+ * and waits for a press.
  *
  * Plain JavaScript ESM, because `build/bundle-client.mjs` rewrites it into the
  * page's closure factory: `react` comes off the module table the shell seeds,
@@ -199,7 +199,12 @@ var CSS = [
   // Move cursor everywhere but the controls; the seek drags itself.
   // The card is a column: the site's 46px face on top, the transport it
   // hangs beneath — the same three controls the deck puts under its own card.
+  // One width, whatever is playing. The column had none, so it took the width
+  // of whatever the title and artist happened to be and the card changed size
+  // from song to song. The title is the only thing that gives, and it gives by
+  // ellipsis.
   '.omamusic{position:fixed;z-index:2147483000;display:flex;flex-direction:column;align-items:stretch;',
+  'width:348px;box-sizing:border-box;',
   'border:1px solid var(--dsw-alias-border-l1);',
   'background:color-mix(in srgb, var(--dsw-alias-bg-base) 85%, transparent);',
   'backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);',
@@ -208,14 +213,9 @@ var CSS = [
   // transport's top border; the line itself sits on the row's foot.
   '.omamusic-row{display:flex;height:46px;align-items:stretch;position:relative;margin-bottom:2px}',
   '.omamusic button,.omamusic input{cursor:pointer}',
-  // Art button: the cover, a veil with the volume glyph, a brand ring
-  // pulsing until the sound has been touched.
+  // The artwork: the mark, and nothing drawn over it.
   '.omamusic-art{position:relative;width:40px;height:40px;flex:none;align-self:flex-start;padding:0;',
   'border:none;border-right:1px solid var(--dsw-alias-border-l1);background:#000 center/cover no-repeat}',
-  '.omamusic-ring{position:absolute;inset:-1px;pointer-events:none;border:1px solid var(--dsw-alias-brand-primary);',
-  'animation:omamusic-ring 1.8s ease-in-out infinite}',
-  '@keyframes omamusic-ring{0%,100%{opacity:1}50%{opacity:.3}}',
-  '@media (prefers-reduced-motion: reduce){.omamusic-ring{animation:none}}',
   // Title over artist; hovering the seek swaps the artist for the readout.
   '.omamusic-text{display:flex;flex-direction:column;justify-content:center;padding:4px 16px 0 12px;',
   'min-width:0;line-height:1.2}',
@@ -393,7 +393,6 @@ function applyFeature(host) {
   var state = 'paused'
   /** Why the card is not playing, when it is not. */
   var failure = ''
-  var touched = false
 
   /** Whether the meter is held by hand — clicking it freezes, clicking
    *  again lets it run. Sound and progress carry on either way. */
@@ -663,7 +662,6 @@ function applyFeature(host) {
 
   /** Start — or restart — the track for real. The first press also fetches. */
   function play() {
-    touched = true
     wantPlaying = true
     if (state === 'playing') return
     if (current() === null) {
@@ -718,7 +716,6 @@ function applyFeature(host) {
    */
   function go(by) {
     if (queue.length === 0) return
-    touched = true
     wantPlaying = true
     step(by)
     duration = 0
@@ -973,6 +970,8 @@ function applyFeature(host) {
       style: { left: home.current.left + 'px', top: home.current.top + 'px' },
     },
       h('div', { className: 'omamusic-row' },
+        // Still a button — the largest target on the card, and it plays and
+        // pauses — but it draws nothing over the mark.
         h('button', {
           className: 'omamusic-art',
           type: 'button',
@@ -984,8 +983,7 @@ function applyFeature(host) {
             if (dragMoved.current) return
             toggle()
           },
-        },
-          touched ? null : h('span', { 'aria-hidden': 'true', className: 'omamusic-ring' })),
+        }),
         h('span', { className: 'omamusic-tip', 'aria-hidden': 'true' },
           h('span', { className: 'omamusic-tip-title' }, title()),
           h('span', { className: 'omamusic-tip-artist' }, artist())),
