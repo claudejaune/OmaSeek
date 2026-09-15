@@ -1,4 +1,4 @@
-# The OmaMusic row on its own: the card and the two routes that feed it.
+# The OmaMusic row on its own: the card, and the route that feeds it the station.
 - insert:
     - id: omaseek-music
       name: omaseek-music
