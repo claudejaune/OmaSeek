@@ -1,6 +1,6 @@
 {
   "name": "omaseek-themes",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Omarchy's 22 home-page themes for DeepSeek Harness, with the scheme-aware picker",
   "type": "module",
   "license": "MIT",
