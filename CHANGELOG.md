@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## omaseek-music
 
+### 0.2.2 - 2026-09-16
+
+#### Added
+
+- Pressing play now asks for the station again when it could not be read, so a network that comes back does not need a page reload
+
 ### 0.2.1 - 2026-09-16
 
 #### Fixed
