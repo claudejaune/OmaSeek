@@ -210,6 +210,9 @@ var FIELD_LABELS = { off: 'Off', ambient: 'Ambient', interactive: 'Interactive' 
 var TYPE_MODES = ['loop', 'once']
 var TYPE_LABELS = { loop: 'Loop', once: 'Once' }
 
+/** Where the section's two choices are remembered across reloads. */
+var STORAGE_KEY = 'omaseek.pixel'
+
 /** The shipped headline span; the sibling badge is told apart by its class. */
 var TITLE_SELECTOR = '[class*="titleGroup"] > span:not([class*="previewBadge"])'
 
@@ -970,20 +973,52 @@ function applyFeature(host) {
   var slots = ctx.get('slots')
   if (slots === undefined) return
 
-  // In-memory and per page load: the section's two choices are switches, not
-  // settings, so nothing here is written anywhere or outlives a reload. (The
-  // package could persist them, but a hero field that comes back off after a
-  // reload would be the surprise, not the feature.)
-  var state = { field: 'interactive', typing: 'loop' }
+  // Remembered per reader rather than per page load: these are choices somebody
+  // made on purpose, and a field that switches itself back on after a reload is
+  // the surprise. The defaults below are what a reader who has never touched
+  // them gets.
+  var state = loadState()
   var notifier = createNotifier()
   var notify = notifier.notify
   var subscribe = notifier.subscribe
+
+  /** One of `modes`, or `fallback` when the stored value names none of them. */
+  function modeOf(modes, value, fallback) {
+    return modes.indexOf(value) >= 0 ? value : fallback
+  }
+
+  /** The two switches as they were last left, or their defaults. */
+  function loadState() {
+    var stored = {}
+    try {
+      var raw = window.localStorage.getItem(STORAGE_KEY)
+      var parsed = raw === null ? null : JSON.parse(raw)
+      if (parsed !== null && typeof parsed === 'object') stored = parsed
+    } catch (unavailable) {
+      // Private mode, or storage denied: the switches still work for this page,
+      // they just cannot be remembered across reloads.
+    }
+    return {
+      field: modeOf(FIELD_MODES, stored.field, 'interactive'),
+      typing: modeOf(TYPE_MODES, stored.typing, 'loop'),
+    }
+  }
+
+  function saveState() {
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+    } catch (unavailable) {
+      // A choice that cannot be written is not an error.
+    }
+  }
 
   // The hero field is chrome: it belongs to whatever element is currently
   // the New Session hero, not to the Settings page that switches it.
   // One field at a time, on one host.
   var fieldOff = null
   var fieldHost = null
+  /** Whether the field now mounted is the interactive one. */
+  var fieldLive = false
 
   /** The conversation root, and only while it is showing the hero. */
   function heroHost() {
@@ -997,15 +1032,21 @@ function applyFeature(host) {
   /** Mount the field on the hero now showing, or take it off. */
   function syncField() {
     var host = state.field === 'off' ? null : heroHost()
-    if (host === fieldHost && fieldOff !== null) return
+    var live = state.field === 'interactive'
+    // Ambient and Interactive are one field with different ears, so a switch
+    // between them is a remount. Without the mode in this test the field kept
+    // the ears it was born with until the page was reloaded.
+    if (host === fieldHost && fieldOff !== null && live === fieldLive) return
     if (fieldOff !== null) { fieldOff(); fieldOff = null; fieldHost = null }
     if (host === null) return
     fieldHost = host
-    fieldOff = mountField(host, state.field === 'interactive')
+    fieldLive = live
+    fieldOff = mountField(host, live)
   }
 
   function setFieldMode(mode) {
     state.field = mode
+    saveState()
     syncField()
     notify()
   }
@@ -1046,6 +1087,7 @@ function applyFeature(host) {
 
   function setTypingMode(mode) {
     state.typing = mode
+    saveState()
     syncSheet()
     syncTyper()
     notify()
@@ -1126,7 +1168,7 @@ function applyFeature(host) {
         h('div', { className: 'omapixel-line' },
           h('span', { className: 'omapixel-legend' }, 'Pixel field:'),
           h('span', { className: 'omapixel-note' },
-            'The cool pixel animations on omarchy.org (needs page refresh)')),
+            'The cool pixel animations from omarchy.org, on the New Session hero')),
         h('div', { className: 'omapixel-row' },
           FIELD_MODES.map(function (mode) {
             return h('button', {

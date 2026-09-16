@@ -14,7 +14,8 @@ pnpm dsh plugin --profile web add omaseek-pixel               # running from a s
 ```
 
 Restart the harness, then open a New Session. **Settings → OmaPixel** switches the field
-between Off, Ambient and Interactive, and the headline between Loop and Once.
+between Off, Ambient and Interactive, and the headline between Loop and Once. Both are
+remembered, so the next session opens the way you left it.
 
 ## License
 

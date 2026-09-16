@@ -300,7 +300,22 @@ const PACKAGES = [
     id: 'omaseek-pixel',
     label: 'OmaPixel (hero)',
     expect: { sections: ['settings.section'], overlays: 0, themes: 0 },
-    cases: [{ label: 'the hero section', scheme: 'dark' }],
+    cases: [
+      { label: 'the hero section', scheme: 'dark' },
+      {
+        // The section's two switches are the reader's, not the page's: what was
+        // left on is what is drawn on when the page comes back.
+        label: 'the switches come back as they were left',
+        scheme: 'dark', pixel: { field: 'off', typing: 'once' },
+        expectActive: ['Off', 'Once'],
+      },
+      {
+        // And a press is written where the next page load will find it.
+        label: 'a press is remembered',
+        scheme: 'dark', pressChip: 'Off',
+        expectStored: { field: 'off', typing: 'loop' },
+      },
+    ],
   },
   {
     dir: 'packages/omaseek-music',
@@ -603,6 +618,8 @@ async function runCase(pkg, testCase) {
   for (const [scheme, id] of Object.entries(testCase.stored === undefined ? {} : testCase.stored)) {
     store.set('omaseek.themes', JSON.stringify({ [scheme]: id }))
   }
+  // OmaPixel's two switches, as a reader left them before this page load.
+  if (testCase.pixel !== undefined) store.set('omaseek.pixel', JSON.stringify(testCase.pixel))
 
   let stationCalls = 0
   globalThis.fetch = async (path) => {
@@ -819,6 +836,45 @@ async function runCase(pkg, testCase) {
           problems.push(`the press sought to ${landed}, expected ${testCase.expectSeek}`)
         }
       }
+    }
+  }
+
+  // A section whose switches are the reader's: the remembered values are the
+  // ones drawn as on, a press is written where the next load looks for it, and
+  // the two are checked separately so a section that reads but never writes
+  // fails on the write rather than passing on the read.
+  if (testCase.expectActive !== undefined) {
+    const on = nodes.filter((node) => typeof node.props.className === 'string'
+      && node.props.className.split(' ').includes('omapixel-chip')
+      && node.props['data-on'] === '1')
+      .map((node) => String(node.children[0])).sort()
+    const wanted = [...testCase.expectActive].sort()
+    if (on.join(',') !== wanted.join(',')) {
+      problems.push(`the switches read ${on.join(', ') || 'none'}, expected ${wanted.join(', ')}`)
+    }
+  }
+
+  if (testCase.pressChip !== undefined) {
+    const chip = nodes.find((node) => typeof node.props.className === 'string'
+      && node.props.className.split(' ').includes('omapixel-chip')
+      && node.children[0] === testCase.pressChip
+      && typeof node.props.onClick === 'function')
+    if (chip === undefined) problems.push(`no "${testCase.pressChip}" chip on the page`)
+    else {
+      try {
+        chip.props.onClick()
+      } catch (error) {
+        problems.push(`pressing "${testCase.pressChip}" threw: ${error.message}`)
+      }
+    }
+  }
+
+  if (testCase.expectStored !== undefined) {
+    const raw = store.get('omaseek.pixel')
+    const held = raw === undefined ? undefined : JSON.parse(raw)
+    if (JSON.stringify(held) !== JSON.stringify(testCase.expectStored)) {
+      problems.push(`the switches were remembered as ${raw === undefined ? 'nothing' : raw}, `
+        + `expected ${JSON.stringify(testCase.expectStored)}`)
     }
   }
 

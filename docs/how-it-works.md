@@ -89,9 +89,11 @@ remounts the field as the hero arrives with the route and leaves with the first 
 
 **Switching it.** Settings → OmaPixel has two settings, each with its chips under a line of
 description. **Pixel field** — `Off` runs nothing, `Ambient` is the drifting lattice alone,
-`Interactive` adds the cursor glow and the press stamp; the page says a refresh is needed for
-that one to take. **Headline** — `Loop` is the site's rotation above, `Once` types one random
-phrase per load and stops.
+`Interactive` adds the cursor glow and the press stamp. **Headline** — `Loop` is the site's
+rotation above, `Once` types one random phrase per load and stops. Both are the reader's choices
+rather than the page's: they are written to `localStorage` under `omaseek.pixel` and come back as
+they were left, and a switch between `Ambient` and `Interactive` re-mounts the field instead of
+waiting for a reload.
 
 ### OmaMusic
 
