@@ -22,6 +22,18 @@ All notable changes to this project will be documented in this file.
 
 - OmaSeek Music now plays every single track on radio.omarchy.org, complete with Play/Pause, Previous, Next buttons and a seek bar
 
+## omaseek-pixel
+
+### 0.2.0 - 2026-09-16
+
+#### Added
+
+- The Pixel field and Headline choices are remembered across reloads, instead of going back to Interactive and Loop
+
+#### Fixed
+
+- Switching the field between Ambient and Interactive now takes effect at once, rather than only after a page reload
+
 ## omaseek-themes
 
 ### 0.1.2 - 2026-09-15
