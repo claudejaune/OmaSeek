@@ -1168,7 +1168,7 @@ function applyFeature(host) {
         h('div', { className: 'omapixel-line' },
           h('span', { className: 'omapixel-legend' }, 'Pixel field:'),
           h('span', { className: 'omapixel-note' },
-            'The cool pixel animations from omarchy.org, on the New Session hero')),
+            'Cool pixel animations on the New Session page')),
         h('div', { className: 'omapixel-row' },
           FIELD_MODES.map(function (mode) {
             return h('button', {
@@ -1183,7 +1183,7 @@ function applyFeature(host) {
         h('div', { className: 'omapixel-line' },
           h('span', { className: 'omapixel-legend' }, 'Headline:'),
           h('span', { className: 'omapixel-note' },
-            'Types omarchy.org\'s headline rotation: loop forever or just play once.')),
+            '"We can fix every..." headline rotation on New Session page: loop forever or just play once.')),
         h('div', { className: 'omapixel-row' },
           TYPE_MODES.map(function (mode) {
             return h('button', {
