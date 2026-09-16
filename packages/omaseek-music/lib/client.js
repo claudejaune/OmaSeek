@@ -83,9 +83,9 @@ exports["fetchJson"] = fetchJson
 	};
 	__defs["client/ui.js"] = (module, exports, __req) => {
 /**
- * The two things every browser feature here builds with: `h`, and the listener
- * list behind each Settings page. A bundle cannot import from a sibling
- * package, so each package that needs them carries its own copy.
+ * The two things this package's browser half builds with: `h`, and the
+ * listener list behind the card's re-renders. A bundle cannot import from a
+ * sibling package, so each package that needs them carries its own copy.
  */
 const React = __req("react")
 
@@ -97,9 +97,8 @@ function h(type, props) {
 }
 
 /**
- * A listener list with one broadcast, which is all three features need to make
- * a settings page follow state it does not own: the feature mutates its own
- * object and calls `notify()`, and every mounted page re-renders.
+ * A listener list with one broadcast: the card mutates its own state and calls
+ * `notify()`, and every mounted card re-renders.
  * @returns `{ notify, subscribe }`; `subscribe` returns its own remover.
  */
 function createNotifier() {
@@ -153,7 +152,7 @@ const insertSheet = __req("client/dom.js").insertSheet
 const createNotifier = __req("client/ui.js").createNotifier
 const h = __req("client/ui.js").h
 
-/** Shown when nothing at all could be read, not even the bundled playlist. */
+/** What the hover tip calls the card before the station has named a song. */
 var TRACK = {
   title: 'Omarchy Radio',
   artist: 'the station',
@@ -166,9 +165,16 @@ var HIGH_HZ = 10000
 var FFT_SIZE = 2048
 var DB_FLOOR = -90
 var LIVE_GAIN = 0.9
-var MUTED_GAIN = 0.6
 var METER_BARS = 4
 var METER_STEPS = 5
+
+/**
+ * The one failure the card's own code both writes and reads back: a track the
+ * card chose itself could not be reached, so the card — not the listener —
+ * walks on from it. One name, because a display string that decides control
+ * flow is one copy-edit away from changing behaviour.
+ */
+var UNREACHABLE = 'The track could not be reached'
 
 /**
  * The card's title budget, in characters — the width the site's card gets
@@ -347,7 +353,8 @@ function applyFeature(host) {
   // The sound. A port of the site's src/lib/music.ts, kept to what
   // the card needs: state, silent clock, live meter.
   // ---------------------------------------------------------------
-  var meta = null
+  /** The one mark every song on the station wears; '' when there is none. */
+  var stationArt = ''
   var duration = 0
   var clockZero = null
 
@@ -355,8 +362,7 @@ function applyFeature(host) {
    * The station: every track the card can walk through, and which one it is
    * on. The queue is the playlist as the Node half resolved it — the
    * station's own address for each song — so next and prev are an index in
-   * this list and nothing more. A card pointed at one file by hand has a
-   * queue of exactly that one track.
+   * this list and nothing more.
    */
   var queue = []
   var index = 0
@@ -463,8 +469,7 @@ function applyFeature(host) {
       if (freq[k] > DB_FLOOR) power += Math.pow(10, freq[k] / 10)
     }
     var db = power > 0 ? 10 * Math.log10(power / (span[1] - span[0])) : DB_FLOOR
-    var raw = Math.max(0, Math.min(1, (db - DB_FLOOR) / -DB_FLOOR))
-    return { raw: raw, level: (raw - floorArr[b]) / Math.max(0.15, peakArr[b] - floorArr[b]) }
+    return Math.max(0, Math.min(1, (db - DB_FLOOR) / -DB_FLOOR))
   }
 
   /** Four coarse levels for the meter, from whichever source is current. */
@@ -483,7 +488,7 @@ function applyFeature(host) {
     // anything louder, the floor creeps up towards it and drops at once.
     analyser.getFloatFrequencyData(freq)
     for (b = 0; b < BANDS; b += 1) {
-      var raw = liveBand(b).raw
+      var raw = liveBand(b)
       peakArr[b] = Math.max(peakArr[b] * 0.9993, raw, 0.2)
       floorArr[b] = Math.min(raw, floorArr[b] + (peakArr[b] - floorArr[b]) * 0.003)
       var span = Math.max(0.15, peakArr[b] - floorArr[b])
@@ -589,7 +594,7 @@ function applyFeature(host) {
       // once. A station that is down would otherwise run the whole list past
       // the listener one failure at a time, so the walk clears its own flag
       // and the next failure is simply the failure.
-      failure = 'The track could not be reached'
+      failure = UNREACHABLE
       state = 'failed'
       running = false
       if (endedByItself) {
@@ -619,11 +624,6 @@ function applyFeature(host) {
   }
 
   /**
-   * Bring the sound up on the track that is up. A track already loaded simply
-   * resumes from where it was paused, picking up the silent clock if it has
-   * never sounded; one that has just taken over starts from its own top.
-   */
-  /**
    * Bring the sound up on the track that is up: what a press on play, on next
    * or on an ended song all end in.
    *
@@ -640,7 +640,7 @@ function applyFeature(host) {
     attempt += 1
     var mine = attempt
     state = 'loading'
-    if (failure !== 'The track could not be reached') failure = ''
+    if (failure !== UNREACHABLE) failure = ''
     announce()
     var ready = audio === null ? prepare(track) : Promise.resolve()
     ready.then(function () {
@@ -760,12 +760,14 @@ function applyFeature(host) {
       if (tracks.length === 0) throw new Error('the station listed no tracks')
       queue = tracks
       index = 0
-      meta = current()
+      // The whole station wears one mark, so it arrives once with the playlist
+      // rather than on each of its songs.
+      stationArt = typeof result.art === 'string' ? result.art : ''
       announce()
     }
 
     function showNothing(why) {
-      meta = null
+      stationArt = ''
       state = 'failed'
       // What the half that answered actually said. A card that only says it
       // could not load leaves whoever is looking at it — and whoever wrote it —
@@ -817,7 +819,7 @@ function applyFeature(host) {
   // ---------------------------------------------------------------
 
   /**
-   * Keep a dragged card inside the window.
+   * Keep a moved card inside the window.
    * A card wider than the window has no valid range at all, so the near margin
    * wins — the alternative (clamping to a negative upper bound) would drag the
    * card off-screen and take its controls with it.
@@ -840,19 +842,39 @@ function applyFeature(host) {
     var scrubbing = React.useRef(false)
     var dragMoved = React.useRef(false)
     var endDrag = React.useRef(null)
+    /**
+     * Where a card that has been moved sits, in viewport pixels. It stays null
+     * while the card has never been dragged, and the stylesheet's own bottom
+     * anchor holds it 8px off the edge at whatever height it renders. A stored
+     * offset is exactly what put the transport off-screen once the card grew
+     * a transport row, so the resting card keeps no number at all.
+     */
     var home = React.useRef(null)
     // A drag that is still in flight when the card unmounts would leave its
     // window listeners holding a detached element, and a seek caught mid-drag
     // would keep the line frozen for the rest of the page's life.
     React.useEffect(function () {
+      // A moved card is placed by number, so a window that shrinks under it
+      // could leave it off-screen with no way back to it. A card that has
+      // never been moved is held by the stylesheet and needs nothing.
+      function onResize() {
+        var card = cardRef.current
+        if (card === null || home.current === null) return
+        var box = card.getBoundingClientRect()
+        home.current = {
+          left: clampToViewport(home.current.left, box.width, window.innerWidth),
+          top: clampToViewport(home.current.top, box.height, window.innerHeight),
+        }
+        card.style.left = home.current.left + 'px'
+        card.style.top = home.current.top + 'px'
+      }
+      window.addEventListener('resize', onResize)
       return function () {
+        window.removeEventListener('resize', onResize)
         if (endDrag.current !== null) endDrag.current()
         scrubbing.current = false
       }
     }, [])
-    if (home.current === null) {
-      home.current = { left: 20, top: window.innerHeight - 66 }
-    }
 
     // Progress line, seek value, readout and meter: driven straight from
     // the track each frame, outside React, so the card never re-renders
@@ -946,6 +968,10 @@ function applyFeature(host) {
         home.current = { left: left, top: top }
         card.style.left = left + 'px'
         card.style.top = top + 'px'
+        // The card rested on the stylesheet's own bottom anchor; it is placed
+        // by number from here. Leaving `top` and `bottom` set together would
+        // stretch it to the gap between them.
+        card.style.bottom = ''
       }
       function onUp() {
         card.removeAttribute('data-dragging')
@@ -965,14 +991,19 @@ function applyFeature(host) {
 
     var on = sounding()
     var playing = wantPlaying && state !== 'failed'
-    var art = meta !== null && typeof meta.art === 'string' ? meta.art : ''
+    var art = stationArt
     var fromStation = queue.length > 1
     return h('div', {
       className: 'omamusic',
       'data-seek': atSeek ? '1' : null,
       ref: cardRef,
       onPointerDown: onPointerDown,
-      style: { left: home.current.left + 'px', top: home.current.top + 'px' },
+      // A card that has never been moved is held by the stylesheet's bottom
+      // anchor, so it sits 8px off the edge at whatever height it renders —
+      // its own or the window's. Once moved it is placed by number.
+      style: home.current === null
+        ? { left: '20px', bottom: '8px' }
+        : { left: home.current.left + 'px', top: home.current.top + 'px' },
     },
       h('div', { className: 'omamusic-row' },
         // Still a button — the largest target on the card, and it plays and

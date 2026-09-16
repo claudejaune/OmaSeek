@@ -72,14 +72,14 @@ function parsePlaylist(text) {
 }
 
 /**
- * The plugin's entry point: register this package's routes on the browser
+ * The plugin's entry point: register this package's route on the browser
  * connection.
  *
- * All three hang off `ctx.inject` rather than a guard: this apply runs while
- * the composition is still assembling, so `ctx.get('connection')` at that
- * moment reads an empty registry and no route would ever appear. The injected
- * scope attaches them when a connection exists and disposes with the fiber; a
- * host with no browser half never runs the callback at all.
+ * It hangs off `ctx.inject` rather than a guard: this apply runs while the
+ * composition is still assembling, so `ctx.get('connection')` at that moment
+ * reads an empty registry and the route would never appear. The injected scope
+ * attaches it when a connection exists and disposes with the fiber; a host with
+ * no browser half never runs the callback at all.
  */
 export function apply(host) {
   host.inject(['connection'], function (ctx) {
@@ -110,15 +110,14 @@ function createCatalogue(ctx) {
       const bytes = await readBytes(ctx, fileURLToPath(LOGO_URL), undefined, 1 << 20)
       logo = 'data:image/png;base64,' + Buffer.from(bytes).toString('base64')
     } catch (missing) {
-      // No picture at all: the card's ring pulses over an empty plate, which
-      // is what it did before there was a mark to draw.
+      // No mark to draw: the card plays on with an empty plate rather than
+      // failing the whole station over a picture.
     }
     return logo
   }
 
   /** The playlist from the station, or the copy beside this module. */
   async function readPlaylist() {
-    const bundled = parsePlaylist(await readText(ctx, fileURLToPath(BUNDLED_PLAYLIST)))
     try {
       const response = await fetch(PLAYLIST_URL, {
         headers: { accept: 'application/json' },
@@ -131,35 +130,35 @@ function createCatalogue(ctx) {
       if (live.tracks.length > 0) return live
       throw new Error('playlist named no tracks')
     } catch (error) {
+      // The copy beside this module is read here and not before, so the
+      // station's own answer never pays for a file it did not need.
       const message = String((error && error.message) || error)
       console.log('omaseek: reading the bundled playlist — ' + message)
-      return bundled
+      return parsePlaylist(await readText(ctx, fileURLToPath(BUNDLED_PLAYLIST)))
     }
   }
 
   /**
-   * The tracks, ready to play: the station's address for each one, and the art
-   * this package holds for it. `refresh` skips the cache, which is what the
-   * card's own reload asks for.
+   * The station, ready to play: the address of each song, and the one mark
+   * they all wear.
    */
-  async function get(refresh) {
+  async function get() {
     const now = Date.now()
-    if (!refresh && cached !== null && now - fetchedAt < PLAYLIST_TTL) return cached
+    if (cached !== null && now - fetchedAt < PLAYLIST_TTL) return cached
     if (inFlight !== null) return inFlight
     inFlight = (async function () {
       const playlist = await readPlaylist()
-      // Read once, before the loop: every track wears the same picture, so
-      // there is nothing per-track to resolve.
+      // Read once, before the loop: the mark belongs to the station, not to
+      // each of its songs, so it is not repeated on every track.
       const art = await logoDataUrl()
       const tracks = playlist.tracks.map((track) => ({
         title: track.title,
         artist: track.artist,
         file: track.file,
         url: TRACKS_DIR + encodeURIComponent(track.file),
-        art: art,
         explicit: track.explicit,
       }))
-      cached = { station: playlist.station, name: playlist.name, tracks: tracks }
+      cached = { station: playlist.station, name: playlist.name, art: art, tracks: tracks }
       fetchedAt = Date.now()
       console.log('omaseek: serving ' + tracks.length + ' tracks from ' + playlist.name)
       return cached
@@ -171,12 +170,12 @@ function createCatalogue(ctx) {
     }
   }
 
-  return { get: get, logoDataUrl: logoDataUrl }
+  return { get: get }
 }
 
 /**
- * The station, in one answer: every track with its address and its art. This
- * is what the card builds its transport around.
+ * The station, in one answer: every song with its address, and the mark they
+ * all wear. This is what the card builds its transport around.
  */
 function registerTracksRoute(ctx, catalog) {
   ctx.effect(function () {
@@ -184,14 +183,10 @@ function registerTracksRoute(ctx, catalog) {
       path: '/api/omaseek.music.tracks',
       methods: ['GET'],
       requestBody: 'buffered',
-      fetch: async function (request) {
+      fetch: async function () {
         try {
-          const refresh = new URL(request.url).searchParams.get('refresh') !== null
-          const list = await catalog.get(refresh)
-          // The card's own reload wants the station as it is now, so a refresh
-          // is answered from no cache at all — in either direction.
-          const headers = { 'cache-control': refresh ? 'no-store' : 'private, max-age=60' }
-          return Response.json(list, { headers: headers })
+          const list = await catalog.get()
+          return Response.json(list, { headers: { 'cache-control': 'private, max-age=60' } })
         } catch (error) {
           const message = String((error && error.message) || error)
           console.error('omaseek: music tracks failed — ' + message)

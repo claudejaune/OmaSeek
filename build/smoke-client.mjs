@@ -309,6 +309,13 @@ const PACKAGES = [
     expect: { sections: [], overlays: 1, themes: 0 },
     cases: [
       { label: 'the station, 2 songs listed', tracks: STATION, expectFailure: null, expectTrack: 'First Song' },
+      {
+        // A card that has never been moved is anchored to the bottom edge by
+        // the stylesheet, at whatever height it renders, instead of by a
+        // number that has to be kept in step with the card's own layout.
+        label: 'the resting card is anchored to the bottom edge',
+        tracks: STATION, expectResting: '8px',
+      },
       { label: 'the station, and it plays', tracks: STATION, play: true, audio: 'ok', expectFailure: null, expectTrack: 'First Song' },
       {
         label: 'next walks the station', tracks: STATION, play: true, audio: 'ok',
@@ -744,6 +751,22 @@ async function runCase(pkg, testCase) {
       if (flag !== testCase.expectSeekFlag) {
         problems.push(`the card's seek flag is ${String(flag)}, expected ${String(testCase.expectSeekFlag)}`)
       }
+    }
+  }
+
+  // A card that has never been dragged rests on the stylesheet's own bottom
+  // anchor. The stored offset this replaced is what left the transport
+  // off-screen once the card grew a row, so the absence of `top` is the point.
+  if (testCase.expectResting !== undefined) {
+    const card = calls.registered.find((entry) => entry.options.name === 'shell.overlay')
+    const root = card === undefined ? undefined
+      : nodesOf(React.createElement(card.component, {})).find((node) => node.props !== undefined
+        && typeof node.props.className === 'string'
+        && node.props.className.split(' ').includes('omamusic'))
+    const style = root === undefined ? undefined : root.props.style
+    if (style === undefined || style.bottom !== testCase.expectResting || style.top !== undefined) {
+      problems.push(`the resting card is at ${JSON.stringify(style)}, `
+        + `expected a bottom of ${testCase.expectResting} and no top`)
     }
   }
 

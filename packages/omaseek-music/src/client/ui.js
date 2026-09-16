@@ -1,7 +1,7 @@
 /**
- * The two things every browser feature here builds with: `h`, and the listener
- * list behind each Settings page. A bundle cannot import from a sibling
- * package, so each package that needs them carries its own copy.
+ * The two things this package's browser half builds with: `h`, and the
+ * listener list behind the card's re-renders. A bundle cannot import from a
+ * sibling package, so each package that needs them carries its own copy.
  */
 import React from 'react'
 
@@ -13,9 +13,8 @@ export function h(type, props) {
 }
 
 /**
- * A listener list with one broadcast, which is all three features need to make
- * a settings page follow state it does not own: the feature mutates its own
- * object and calls `notify()`, and every mounted page re-renders.
+ * A listener list with one broadcast: the card mutates its own state and calls
+ * `notify()`, and every mounted card re-renders.
  * @returns `{ notify, subscribe }`; `subscribe` returns its own remover.
  */
 export function createNotifier() {
