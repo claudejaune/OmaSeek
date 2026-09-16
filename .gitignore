@@ -20,5 +20,6 @@ references/
 # Packed tarballs from a release check
 *.tgz
 
-# A local copy of the track, for development. The plugin streams the real one.
+# A leftover copy of the one song the card used to play, kept beside the package.
+# Nothing reads it; the card streams the station's own songs.
 assets/

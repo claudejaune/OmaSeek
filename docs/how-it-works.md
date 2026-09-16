@@ -141,8 +141,9 @@ everything to their right moved when the number gained a digit.
 Whatever went wrong is named on the card. Not "the station could not be loaded" — the reason the
 fetch gave, which is the difference between a card that looks broken and a card that says
 `responded 500` and can be acted on. No network, a station that is not there, a station with
-nothing to play: each says which it was, and the play button stays live so a press tries again
-once the network is back.
+nothing to play: each says which it was. The station is read once, when the card mounts, so a
+page reload is what asks again; a track that failed after the station answered is retried by a
+press on play.
 
 A quiet one worth knowing about: a play the browser abandons — `interrupted by a call to
 pause()`, which is what a second press does — arrives as a rejected promise from `play()` and is
@@ -155,7 +156,8 @@ The card wears the Omarchy mark, and every song wears the same one. That is a de
 shortcut: of the thirty-three songs in the station's playlist, exactly **one** has a picture in
 its ID3 tag. Resolving art per track cost a map, an extracted JPEG, and a lookup that answered
 "no" thirty-two times in thirty-three, so it was taken back out. `art/omarchy.png` is the whole
-of the card's artwork.
+of the card's artwork, and it belongs to the station rather than to a song: the catalogue carries
+it once beside the list, not once on every track.
 
 It is not per-song art that is the exception — it is art at all. A song submitted next month with
 a beautiful cover of its own will wear the mark like the rest.
@@ -163,13 +165,15 @@ a beautiful cover of its own will wear the mark like the rest.
 The mark is 40px and sits at the top of its row, which leaves 4px of clearance before the
 progress line at the row's foot and 2px between that line and the transport. Those numbers are
 not decoration: the artwork and the line were a single pixel apart before, which read as one
-shape rather than two.
+shape rather than two. The card itself is held to the window's bottom edge by the stylesheet's
+own anchor and not by a measured offset — it has changed height once already, and the number
+that was meant to follow it did not.
 
 A stream needs the host to allow cross-origin reads for the meter; if it does not, the card
 retries without CORS, plays the sound, and leaves the meter flat.
 
-`packages/omaseek-music/assets/music/` in this checkout keeps a local copy of a track for
-development, untracked.
+`packages/omaseek-music/assets/music/` in this checkout is a leftover from when the card played
+one song — a copy of that track and its analysed spectrum. Nothing reads it, and it is untracked.
 
 ## Layout of the seam
 
