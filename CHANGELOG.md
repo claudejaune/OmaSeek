@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## omaseek-music
 
+### 0.2.1 - 2026-09-16
+
+#### Fixed
+
+- The music card no longer starts with its transport pushed below the bottom edge of the window, and a card that has been dragged stays on screen when the window shrinks
+
 ### 0.2.0 - 2026-09-15
 
 #### Added
