@@ -375,6 +375,14 @@ const PACKAGES = [
         expectFailure: 'The station: omaseek: /api/omaseek.music.tracks responded 500',
       },
       {
+        // The station was not there when the card loaded. A press is the
+        // listener asking again, and the answer that comes back plays: the card
+        // is not stuck until the page is reloaded.
+        label: 'a press asks the station again after it was not there',
+        tracks: STATION, stationRecovers: true, play: true, audio: 'ok',
+        expectFailure: null, expectTrack: 'First Song',
+      },
+      {
         label: 'the station is there and the song is not', tracks: STATION, play: true, audio: 'error',
         expectFailure: 'The track could not be reached', expectTrack: 'First Song',
       },
@@ -596,10 +604,17 @@ async function runCase(pkg, testCase) {
     store.set('omaseek.themes', JSON.stringify({ [scheme]: id }))
   }
 
+  let stationCalls = 0
   globalThis.fetch = async (path) => {
     if (path === '/api/omaseek.themes') return jsonResponse(THEMES)
     // The station's catalogue, and the only route the music card asks for.
     if (path === '/api/omaseek.music.tracks') {
+      stationCalls += 1
+      // A station that was not there and came back: the first answer fails and
+      // every later one is the catalogue the case named.
+      if (testCase.stationRecovers === true && stationCalls === 1) {
+        return { ok: false, status: 500, async json() { return { error: 'nope' } } }
+      }
       if (testCase.tracks === null) return { ok: false, status: 500, async json() { return { error: 'nope' } } }
       // A host that does not have the route at all answers the way a real one
       // would: not found.

@@ -266,6 +266,8 @@ export function applyFeature(host) {
   // and a late arrival must not open an audio context or start playing sound
   // nothing can reach any more.
   var disposed = false
+  /** Whether the station has been asked and has not answered yet. */
+  var stationReading = false
   var freq = new Float32Array(0)
   var bins = []
   var floorArr = new Float32Array(BANDS)
@@ -539,17 +541,23 @@ export function applyFeature(host) {
     })
   }
 
-  /** Start — or restart — the track for real. The first press also fetches. */
+  /**
+   * Start — or restart — the track for real. A press is also what asks the
+   * station again, when the card never got an answer to walk through.
+   */
   function play() {
     wantPlaying = true
     if (state === 'playing') return
     if (current() === null) {
-      // Nothing to play — but the card already knows *why* nothing is there,
-      // and "no track is set" is not the answer when the station was the thing
-      // that could not be read. Only a card that never got an answer says it.
-      if (failure === '') failure = 'No track is set'
-      state = 'failed'
+      // Nothing to play. While the station is still being read, the press is
+      // the listener asking for the sound and that answer will start it. Once
+      // the reading is over and nothing came back, the press asks again — which
+      // is what makes a network that returns usable without reloading the page.
+      if (stationReading) return
+      state = 'loading'
+      failure = ''
       announce()
+      readStation()
       return
     }
     start(false)
@@ -564,7 +572,9 @@ export function applyFeature(host) {
   }
 
   function toggle() {
-    if (wantPlaying) pause()
+    // A card that failed is not a card that is playing, so a press on it is the
+    // listener asking for another go rather than a pause.
+    if (wantPlaying && state !== 'failed') pause()
     else play()
   }
 
@@ -626,54 +636,66 @@ export function applyFeature(host) {
 
   // The catalogue's arrival is what the card walks through: the station's own
   // playlist, in the order the site plays it.
-  ctx.effect(function () {
-    var alive = true
+  function showStation(result) {
+    var tracks = result.tracks === undefined || result.tracks === null ? [] : result.tracks
+    if (tracks.length === 0) throw new Error('the station listed no tracks')
+    queue = tracks
+    index = 0
+    // The whole station wears one mark, so it arrives once with the playlist
+    // rather than on each of its songs.
+    stationArt = typeof result.art === 'string' ? result.art : ''
+    // A press that was waiting on this answer is what asked for it, so the
+    // sound it wanted starts now that there is something to start.
+    if (wantPlaying) start(false)
+    else announce()
+  }
 
-    function showStation(result) {
-      var tracks = result.tracks === undefined || result.tracks === null ? [] : result.tracks
-      if (tracks.length === 0) throw new Error('the station listed no tracks')
-      queue = tracks
-      index = 0
-      // The whole station wears one mark, so it arrives once with the playlist
-      // rather than on each of its songs.
-      stationArt = typeof result.art === 'string' ? result.art : ''
-      announce()
-    }
+  function showNothing(why) {
+    stationArt = ''
+    state = 'failed'
+    // What the half that answered actually said. A card that only says it
+    // could not load leaves whoever is looking at it — and whoever wrote it —
+    // with nothing to go on; the reason the fetch gave is worth more than the
+    // sentence we would have written for it.
+    failure = why === '' ? 'The station could not be loaded' : 'The station: ' + why
+    console.error('omamusic: ' + failure)
+    announce()
+  }
 
-    function showNothing(why) {
-      stationArt = ''
-      state = 'failed'
-      // What the half that answered actually said. A card that only says it
-      // could not load leaves whoever is looking at it — and whoever wrote it —
-      // with nothing to go on; the reason the fetch gave is worth more than the
-      // sentence we would have written for it.
-      failure = why === '' ? 'The station could not be loaded' : 'The station: ' + why
-      console.error('omamusic: ' + failure)
-      announce()
-    }
-
-    // The station, in one answer. A host with no catalogue route at all — an
-    // older build — leaves the card with nothing to play, and that is said
-    // rather than worked around.
+  /**
+   * The station, in one answer. A host with no catalogue route at all — an
+   * older build — leaves the card with nothing to play, and that is said
+   * rather than worked around.
+   *
+   * The card asks once when it mounts, and a press asks again when the first
+   * answer never came. A station that was down is not a card that is stuck
+   * until the page is reloaded.
+   */
+  function readStation() {
+    if (stationReading || disposed) return
+    stationReading = true
     fetchJson('/api/omaseek.music.tracks').then(function (result) {
-      if (!alive) return
+      stationReading = false
+      if (disposed) return
       try {
         showStation(result)
       } catch (empty) {
         var said = String((empty && empty.message) || empty)
         console.error('omamusic: ' + said)
-        if (!alive) return
-        showNothing(said)
+        if (!disposed) showNothing(said)
       }
     }).catch(function (error) {
-      if (!alive) return
+      stationReading = false
+      if (disposed) return
       var why = String((error && error.message) || error)
       console.error('omamusic: ' + why)
       showNothing(why)
     })
+  }
 
+  ctx.effect(function () {
+    readStation()
     return function () {
-      alive = false
       disposed = true
       if (audio !== null) {
         audio.pause()

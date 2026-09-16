@@ -141,9 +141,9 @@ everything to their right moved when the number gained a digit.
 Whatever went wrong is named on the card. Not "the station could not be loaded" — the reason the
 fetch gave, which is the difference between a card that looks broken and a card that says
 `responded 500` and can be acted on. No network, a station that is not there, a station with
-nothing to play: each says which it was. The station is read once, when the card mounts, so a
-page reload is what asks again; a track that failed after the station answered is retried by a
-press on play.
+nothing to play: each says which it was, and a press on play is what asks again — for the station
+when the card has nothing at all, and for the track when the station answered but that song did
+not play.
 
 A quiet one worth knowing about: a play the browser abandons — `interrupted by a call to
 pause()`, which is what a second press does — arrives as a rejected promise from `play()` and is
