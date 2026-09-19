@@ -15,7 +15,7 @@ All notable changes to this project will be documented in this file.
 #### Changed
 
 - The artwork is no longer a play/pause button. It was the transport's job already; now it just shows the mark, drags the card, and shows the same hover tooltip as the rest of it
-- Every border and dividing line on the card now uses the same token the shell's own chrome draws with, so the card reads as part of the interface rather than as a paler thing floating over it. Still fully theme-driven — nothing is a literal colour
+- The card's outline now uses the same token the shell's own chrome draws with, so it reads as part of the interface rather than as a paler thing floating over it. The lines *inside* the card stayed at their original weight — at the stronger weight they turned it into a grid fighting its own content. Still fully theme-driven, nothing is a literal colour
 
 #### Fixed
 

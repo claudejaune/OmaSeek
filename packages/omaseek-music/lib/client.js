@@ -217,13 +217,18 @@ var CSS = [
   // ellipsis.
   '.omamusic{position:fixed;z-index:2147483000;display:flex;flex-direction:column;align-items:stretch;',
   'width:292px;box-sizing:border-box;',
-  // One line colour for the whole widget, and one place to change it. It is
-  // the token the shell's own chrome draws with -- the "Choose an app to open
-  // in" pill up in the title bar uses `border-l4` -- so the card reads as
-  // part of the same interface rather than as a paler thing floating over
-  // it. Nothing here is a literal colour: whatever palette is in force, the
-  // card and the shell follow it together.
+  // Two line colours, and one place for each. An OUTLINE is a surface's own
+  // perimeter -- the card, the tooltips, the `E` badge -- and takes the
+  // token the shell's own chrome draws with: the "Choose an app to open in"
+  // pill up in the title bar uses `border-l4`. A DIVIDER separates two
+  // regions inside one surface -- beside the mark, above the transport,
+  // between its buttons, along the rail -- and stays at `border-l1`. At `l4`
+  // those internal lines turned the card into a grid fighting the content it
+  // holds; the outline is what should say where the card is, and the dividers
+  // should only hint at how it is arranged. Nothing here is a literal
+  // colour: whatever palette is in force, the card and the shell follow it.
   '--omamusic-line:var(--dsw-alias-border-l4);',
+  '--omamusic-divider:var(--dsw-alias-border-l1);',
   'border:1px solid var(--omamusic-line);',
   'background:color-mix(in srgb, var(--dsw-alias-bg-base) 85%, transparent);',
   'backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);',
@@ -258,7 +263,7 @@ var CSS = [
   // shave a pixel off the picture.
   '.omamusic-art{position:relative;box-sizing:border-box;width:40px;height:40px;flex:none;',
   'align-self:flex-start;padding:0;',
-  'border:none;border-right:1px solid var(--omamusic-line);background:#000 center/cover no-repeat}',
+  'border:none;border-right:1px solid var(--omamusic-divider);background:#000 center/cover no-repeat}',
   // Title over artist; hovering the seek swaps the artist for the readout.
   '.omamusic-text{display:flex;flex-direction:column;justify-content:center;flex:1 1 auto;',
   'padding:4px 16px 0 12px;',
@@ -319,10 +324,10 @@ var CSS = [
   '.omamusic-tip-artist{font-size:11px;color:var(--dsw-alias-label-secondary)}',
   // The transport: the site's own three controls, moved under the card's
   // face. prev and next are presses; only the play button is a state.
-  '.omamusic-transport{display:flex;align-items:center;border-top:1px solid var(--omamusic-line)}',
+  '.omamusic-transport{display:flex;align-items:center;border-top:1px solid var(--omamusic-divider)}',
   '.omamusic-tb{display:flex;flex:1;height:26px;align-items:center;justify-content:center;',
   'padding:0;border:none;background:transparent;color:var(--dsw-alias-label-secondary)}',
-  '.omamusic-tb + .omamusic-tb{border-left:1px solid var(--omamusic-line)}',
+  '.omamusic-tb + .omamusic-tb{border-left:1px solid var(--omamusic-divider)}',
   '.omamusic-tb:hover{background:rgba(128,128,128,.12);color:var(--dsw-alias-label-primary)}',
   '.omamusic-tb:focus-visible{outline:1px solid var(--dsw-alias-brand-primary);outline-offset:-2px}',
   '.omamusic-tb[aria-disabled="true"]{opacity:.4}',
@@ -356,7 +361,7 @@ var CSS = [
   // stays put and stays clickable whatever width the card is sliding through.
   '.omamusic-collapse{position:absolute;right:0;top:0;bottom:0;width:18px;',
   'display:flex;align-items:center;justify-content:center;padding:0;',
-  'border:none;border-left:1px solid var(--omamusic-line);background:transparent;',
+  'border:none;border-left:1px solid var(--omamusic-divider);background:transparent;',
   'color:var(--dsw-alias-label-secondary)}',
   '.omamusic-collapse:hover{background:rgba(128,128,128,.12);color:var(--dsw-alias-label-primary)}',
   '.omamusic-collapse:focus-visible{outline:1px solid var(--dsw-alias-brand-primary);outline-offset:-2px}',
