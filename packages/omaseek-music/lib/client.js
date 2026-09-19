@@ -217,7 +217,14 @@ var CSS = [
   // ellipsis.
   '.omamusic{position:fixed;z-index:2147483000;display:flex;flex-direction:column;align-items:stretch;',
   'width:292px;box-sizing:border-box;',
-  'border:1px solid var(--dsw-alias-border-l1);',
+  // One line colour for the whole widget, and one place to change it. It is
+  // the token the shell's own chrome draws with -- the "Choose an app to open
+  // in" pill up in the title bar uses `border-l4` -- so the card reads as
+  // part of the same interface rather than as a paler thing floating over
+  // it. Nothing here is a literal colour: whatever palette is in force, the
+  // card and the shell follow it together.
+  '--omamusic-line:var(--dsw-alias-border-l4);',
+  'border:1px solid var(--omamusic-line);',
   'background:color-mix(in srgb, var(--dsw-alias-bg-base) 85%, transparent);',
   'backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);',
   'transition:width .2s cubic-bezier(.4,0,.2,1);',
@@ -251,7 +258,7 @@ var CSS = [
   // shave a pixel off the picture.
   '.omamusic-art{position:relative;box-sizing:border-box;width:40px;height:40px;flex:none;',
   'align-self:flex-start;padding:0;',
-  'border:none;border-right:1px solid var(--dsw-alias-border-l1);background:#000 center/cover no-repeat}',
+  'border:none;border-right:1px solid var(--omamusic-line);background:#000 center/cover no-repeat}',
   // Title over artist; hovering the seek swaps the artist for the readout.
   '.omamusic-text{display:flex;flex-direction:column;justify-content:center;flex:1 1 auto;',
   'padding:4px 16px 0 12px;',
@@ -282,7 +289,7 @@ var CSS = [
   '.omamusic-meter:hover{background:rgba(128,128,128,.12)}',
   '.omamusic-bar{display:block;width:3px;flex:none;height:2px;background:var(--dsw-alias-brand-primary)}',
   '.omamusic-viz-tip{position:absolute;left:50%;bottom:calc(100% + 8px);transform:translateX(-50%);',
-  'padding:6px 8px;border:1px solid var(--dsw-alias-border-l1);',
+  'padding:6px 8px;border:1px solid var(--omamusic-line);',
   'background:var(--dsw-specific-tip, var(--dsw-alias-bg-overlay));',
   'box-shadow:0 4px 16px rgba(0,0,0,.25);opacity:0;pointer-events:none;white-space:nowrap;',
   'font-size:11px;color:var(--dsw-alias-label-primary);transition:opacity .15s ease-out}',
@@ -301,7 +308,7 @@ var CSS = [
   '.omamusic-seek::-moz-range-thumb{width:0;height:14px;border:none;background:transparent}',
   // Hover tooltip: the full title over the artist, painted with the tip token.
   '.omamusic-tip{position:absolute;left:0;bottom:calc(100% + 8px);display:flex;flex-direction:column;',
-  'gap:2px;padding:8px 10px;border:1px solid var(--dsw-alias-border-l1);',
+  'gap:2px;padding:8px 10px;border:1px solid var(--omamusic-line);',
   'background:var(--dsw-specific-tip, var(--dsw-alias-bg-overlay));',
   'box-shadow:0 4px 16px rgba(0,0,0,.25);opacity:0;pointer-events:none;white-space:nowrap;',
   'transition:opacity .15s ease-out}',
@@ -312,10 +319,10 @@ var CSS = [
   '.omamusic-tip-artist{font-size:11px;color:var(--dsw-alias-label-secondary)}',
   // The transport: the site's own three controls, moved under the card's
   // face. prev and next are presses; only the play button is a state.
-  '.omamusic-transport{display:flex;align-items:center;border-top:1px solid var(--dsw-alias-border-l1)}',
+  '.omamusic-transport{display:flex;align-items:center;border-top:1px solid var(--omamusic-line)}',
   '.omamusic-tb{display:flex;flex:1;height:26px;align-items:center;justify-content:center;',
   'padding:0;border:none;background:transparent;color:var(--dsw-alias-label-secondary)}',
-  '.omamusic-tb + .omamusic-tb{border-left:1px solid var(--dsw-alias-border-l1)}',
+  '.omamusic-tb + .omamusic-tb{border-left:1px solid var(--omamusic-line)}',
   '.omamusic-tb:hover{background:rgba(128,128,128,.12);color:var(--dsw-alias-label-primary)}',
   '.omamusic-tb:focus-visible{outline:1px solid var(--dsw-alias-brand-primary);outline-offset:-2px}',
   '.omamusic-tb[aria-disabled="true"]{opacity:.4}',
@@ -332,7 +339,7 @@ var CSS = [
   '@keyframes omamusic-in{from{opacity:0}to{opacity:1}}',
   // The label the station puts on a song that swears, kept small enough to
   // sit between the byline and the meter without pushing either aside.
-  '.omamusic-e{flex:none;align-self:center;padding:0 4px;border:1px solid var(--dsw-alias-border-l1);',
+  '.omamusic-e{flex:none;align-self:center;padding:0 4px;border:1px solid var(--omamusic-line);',
   'font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:9px;line-height:13px;',
   'color:var(--dsw-alias-label-secondary)}',
   // Where this track sits in the station, when it came from one. It is a
@@ -349,7 +356,7 @@ var CSS = [
   // stays put and stays clickable whatever width the card is sliding through.
   '.omamusic-collapse{position:absolute;right:0;top:0;bottom:0;width:18px;',
   'display:flex;align-items:center;justify-content:center;padding:0;',
-  'border:none;border-left:1px solid var(--dsw-alias-border-l1);background:transparent;',
+  'border:none;border-left:1px solid var(--omamusic-line);background:transparent;',
   'color:var(--dsw-alias-label-secondary)}',
   '.omamusic-collapse:hover{background:rgba(128,128,128,.12);color:var(--dsw-alias-label-primary)}',
   '.omamusic-collapse:focus-visible{outline:1px solid var(--dsw-alias-brand-primary);outline-offset:-2px}',
@@ -357,7 +364,7 @@ var CSS = [
   // Its own tip, above the rail and right-aligned to it: a tip to the right of
   // the rail would hang off the edge of the window the card is parked against.
   '.omamusic-collapse-tip{position:absolute;right:0;bottom:calc(100% + 8px);',
-  'padding:6px 8px;border:1px solid var(--dsw-alias-border-l1);',
+  'padding:6px 8px;border:1px solid var(--omamusic-line);',
   'background:var(--dsw-specific-tip, var(--dsw-alias-bg-overlay));',
   'box-shadow:0 4px 16px rgba(0,0,0,.25);opacity:0;pointer-events:none;white-space:nowrap;',
   'font-size:11px;color:var(--dsw-alias-label-primary);transition:opacity .15s ease-out}',

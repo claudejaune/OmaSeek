@@ -153,6 +153,23 @@ of it, and shows the card's own hover tooltip. As a plain element rather than a 
 `cursor: move` instead of `cursor: pointer`, which is the honest thing to show on something
 whose only job is to be dragged.
 
+**One line colour, `--omamusic-line`.** Every border and dividing line on the card — the outer
+edge, the rule beside the mark, the rail's divider, the transport's top, the `E` badge, all
+three tooltips — reads from a single custom property set on the card, so the whole widget can be
+retuned in one place. It resolves to `--dsw-alias-border-l4`, the token the shell's own chrome
+draws with: the "Choose an app to open in" pill in the title bar, the settings fields, the
+review headers. The card used `border-l1`, which at `rgba(0,0,0,.04)` against the shell's
+`rgba(0,0,0,.16)` made it read as a faded thing laid over the interface rather than as part of
+it. Nothing is a literal colour anywhere in the widget; the card and the shell follow whatever
+palette is in force together.
+
+Worth knowing: `border-l4` is not one of the thirteen native theme tokens, and OmaThemes
+declares only `l1` and `l2`. Under an Omarchy palette `l4` therefore falls through to the
+`design-platform.css` default rather than to the palette's own border colour — which is still
+correct here, because the button above falls through to exactly the same value and the two match
+either way. Should OmaThemes ever grow `l3`/`l4` entries, the card and the shell's chrome would
+pick them up together with no change on this side.
+
 ### Shutting it
 
 A rail down the card's right edge folds it to the width of its own mark: the Omarchy picture,
