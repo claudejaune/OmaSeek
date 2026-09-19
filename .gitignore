@@ -12,6 +12,10 @@ dist/
 *.log
 npm-debug.log*
 pnpm-debug.log*
+# Never tracked here, and a byproduct of building locally rather than anything the
+# published packages need. Left unignored it blocks `pnpm publish` outright with
+# ERR_PNPM_GIT_UNCLEAN, for a file nobody is deciding to commit.
+pnpm-lock.yaml
 
 # Local notes, and the reference checkouts the ports were read from
 TODO.md
