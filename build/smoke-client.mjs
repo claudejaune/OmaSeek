@@ -363,6 +363,20 @@ const PACKAGES = [
         remembered: { file: 'gone-song.mp3', position: 120, duration: 200 },
         expectTrack: 'First Song',
       },
+      {
+        // A card that was dragged comes back where the hand left it, placed by
+        // number instead of resting on the stylesheet's bottom anchor.
+        label: 'a dragged card comes back where it was left',
+        tracks: STATION, spot: { left: 480, top: 220 },
+        expectPlaced: { left: 480, top: 220 },
+      },
+      {
+        // A spot remembered with a broken number is no spot at all: the card
+        // rests on the stylesheet's anchor rather than going nowhere.
+        label: 'a broken remembered spot falls back to resting',
+        tracks: STATION, spot: { left: 'nowhere', top: null },
+        expectResting: '8px',
+      },
       { label: 'the station, and it plays', tracks: STATION, play: true, audio: 'ok', expectFailure: null, expectTrack: 'First Song' },
       {
         label: 'next walks the station', tracks: STATION, play: true, audio: 'ok',
@@ -652,12 +666,14 @@ async function runCase(pkg, testCase) {
   }
   // OmaPixel's two switches, as a reader left them before this page load.
   if (testCase.pixel !== undefined) store.set('omaseek.pixel', JSON.stringify(testCase.pixel))
-  // OmaMusic's rail, shut or open, as the reader left it.
-  if (testCase.shut !== undefined) store.set('omaseek.music', JSON.stringify({ collapsed: testCase.shut }))
-  // …and the song it was on, and how far into it.
-  if (testCase.remembered !== undefined) {
-    store.set('omaseek.music', JSON.stringify({ collapsed: false, track: testCase.remembered }))
-  }
+  // What the last page left in `omaseek.music`: the fold, the song, and the
+  // spot the card was dragged to. Assembled as one object, because each of
+  // these writes the same key and a second `set` would erase the first.
+  const music = {}
+  if (testCase.shut !== undefined) music.collapsed = testCase.shut
+  if (testCase.remembered !== undefined) music.track = testCase.remembered
+  if (testCase.spot !== undefined) music.position = testCase.spot
+  if (Object.keys(music).length > 0) store.set('omaseek.music', JSON.stringify(music))
 
   let stationCalls = 0
   globalThis.fetch = async (path) => {
@@ -888,6 +904,25 @@ async function runCase(pkg, testCase) {
       if (full !== testCase.expectTransport) {
         problems.push(`the transport is ${String(full)}, expected ${String(testCase.expectTransport)}`)
       }
+    }
+  }
+
+  // A card that was dragged comes back placed by number, not resting on the
+  // stylesheet's bottom anchor. The clamp that keeps a remembered spot inside
+  // a window that has since shrunk reads the card's real box, which this
+  // harness never mounts, so what is checked here is the restore itself.
+  if (testCase.expectPlaced !== undefined) {
+    const card = calls.registered.find((entry) => entry.options.name === 'shell.overlay')
+    const root = card === undefined ? undefined
+      : nodesOf(React.createElement(card.component, {})).find((node) => node.props !== undefined
+        && typeof node.props.className === 'string'
+        && node.props.className.split(' ').includes('omamusic'))
+    const style = root === undefined ? undefined : root.props.style
+    const want = testCase.expectPlaced
+    if (style === undefined || style.left !== `${want.left}px` || style.top !== `${want.top}px`
+      || style.bottom !== undefined) {
+      problems.push(`the card is placed at ${JSON.stringify(style)}, `
+        + `expected ${want.left}px / ${want.top}px and no bottom`)
     }
   }
 

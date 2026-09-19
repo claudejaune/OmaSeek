@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## omaseek-music
 
+### 0.2.5 - 2026-09-19
+
+#### Added
+
+- The card keeps the spot it was dragged to. It no longer snaps back to the bottom-left corner on every reload — and if the window it comes back into is smaller than the one it left, it is pulled back inside rather than being lost off the edge
+
 ### 0.2.4 - 2026-09-19
 
 #### Added

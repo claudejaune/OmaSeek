@@ -213,6 +213,24 @@ that still fires when the browser puts the page in the back-forward cache, unlik
 `beforeunload`. Plus a five-second heartbeat while the sound is running, so a tab killed
 outright still comes back within five seconds of the mark.
 
+**Where it sits** is remembered alongside them, as `{ left, top }`, written when the hand comes
+off a drag rather than on every step of it. A card that has never been dragged keeps no number
+at all and rests on the stylesheet's own bottom anchor; only one that has been moved comes back
+placed by number, which is what the anchor and the placement are for — the anchor follows the
+window's bottom edge at whatever height the card turns out to have, and the placement follows
+the reader.
+
+A remembered spot was written against a window that may since have changed: a smaller monitor, a
+shallower browser, a card left parked at the far right of a screen that is now narrower. So it
+is clamped back inside **before the first paint**, against the box the card actually measures —
+not against a size guessed at from the stylesheet, because the card's height has changed once
+already and the number written to follow it did not.
+
+The clamp deliberately does not write itself back. A window that shrinks for a moment should not
+spend the spot the reader actually chose: the original stays remembered and gets clamped again,
+as many times as the window feels like, and the card goes back to where it was put when the
+screen does.
+
 ### When it cannot play
 
 Whatever went wrong is named on the card. Not "the station could not be loaded" — the reason the

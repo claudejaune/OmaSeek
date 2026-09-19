@@ -556,14 +556,31 @@ function applyFeature(host) {
     }
   }
 
+  /**
+   * A remembered spot, or nothing. Both numbers have to be real: a spot with
+   * a `NaN` in it places the card nowhere at all, and the stylesheet's own
+   * anchor is a far better answer than a broken number.
+   */
+  function readPosition(spot) {
+    if (spot === null || typeof spot !== 'object') return null
+    var left = Number(spot.left)
+    var top = Number(spot.top)
+    if (!isFinite(left) || !isFinite(top)) return null
+    return { left: left, top: top }
+  }
+
   function readMemory() {
-    var blank = { collapsed: false, track: null }
+    var blank = { collapsed: false, track: null, position: null }
     try {
       var raw = window.localStorage.getItem(MEMORY_KEY)
       if (raw === null) return blank
       var saved = JSON.parse(raw)
       if (saved === null || typeof saved !== 'object') return blank
-      return { collapsed: saved.collapsed === true, track: readTrackMemory(saved.track) }
+      return {
+        collapsed: saved.collapsed === true,
+        track: readTrackMemory(saved.track),
+        position: readPosition(saved.position),
+      }
     } catch (unavailable) {
       return blank
     }
@@ -574,6 +591,7 @@ function applyFeature(host) {
       window.localStorage.setItem(MEMORY_KEY, JSON.stringify({
         collapsed: collapsed,
         track: memory.track,
+        position: memory.position,
         savedAt: Date.now(),
       }))
     } catch (unavailable) {
@@ -1177,8 +1195,56 @@ function applyFeature(host) {
      * anchor holds it 8px off the edge at whatever height it renders. A stored
      * offset is exactly what put the transport off-screen once the card grew
      * a transport row, so the resting card keeps no number at all.
+     *
+     * It starts from wherever the last page left it, which is a number — so a
+     * card that was ever dragged comes back placed rather than resting, and
+     * only one that has never been touched gets the anchor.
      */
-    var home = React.useRef(null)
+    var home = React.useRef(memory.position === null
+      ? null
+      : { left: memory.position.left, top: memory.position.top })
+
+    /**
+     * Write down where the card sits. Called when the hand comes off a drag and
+     * when a toggle takes the card in hand — not on every step of a drag, which
+     * would be a write per pixel of travel.
+     */
+    function savePosition() {
+      memory.position = home.current === null
+        ? null
+        : { left: home.current.left, top: home.current.top }
+      writeMemory()
+    }
+
+    /**
+     * Pull a card that is placed by number back inside the window, against the
+     * box it actually has rather than a size guessed at from the stylesheet:
+     * the card's height has changed once already, and the number written to
+     * follow it did not.
+     */
+    function clampIntoWindow() {
+      var card = cardRef.current
+      if (card === null || home.current === null) return
+      var box = card.getBoundingClientRect()
+      var left = clampToViewport(home.current.left, box.width, window.innerWidth)
+      var top = clampToViewport(home.current.top, box.height, window.innerHeight)
+      if (left === home.current.left && top === home.current.top) return
+      home.current = { left: left, top: top }
+      card.style.left = left + 'px'
+      card.style.top = top + 'px'
+    }
+
+    /**
+     * A remembered spot was written against a window that may since have
+     * changed — a smaller monitor, a shallower browser, a card left open at
+     * the far right and a screen that is now narrower. Clamped before the
+     * first paint, so the card is never drawn somewhere it cannot be reached.
+     *
+     * Not written back down. A window that shrinks for a moment should not
+     * spend the spot the reader actually chose; the original stays remembered
+     * and gets clamped again, as many times as the window sees fit.
+     */
+    React.useLayoutEffect(clampIntoWindow, [])
 
     /**
      * Hold the card inside the window at a width it has not reached yet.
@@ -1200,6 +1266,7 @@ function applyFeature(host) {
       // The card rested on the stylesheet's bottom anchor; it is placed by
       // number from here. Leaving both set would stretch it to the gap.
       card.style.bottom = ''
+      savePosition()
     }
 
     /**
@@ -1243,20 +1310,9 @@ function applyFeature(host) {
       // A moved card is placed by number, so a window that shrinks under it
       // could leave it off-screen with no way back to it. A card that has
       // never been moved is held by the stylesheet and needs nothing.
-      function onResize() {
-        var card = cardRef.current
-        if (card === null || home.current === null) return
-        var box = card.getBoundingClientRect()
-        home.current = {
-          left: clampToViewport(home.current.left, box.width, window.innerWidth),
-          top: clampToViewport(home.current.top, box.height, window.innerHeight),
-        }
-        card.style.left = home.current.left + 'px'
-        card.style.top = home.current.top + 'px'
-      }
-      window.addEventListener('resize', onResize)
+      window.addEventListener('resize', clampIntoWindow)
       return function () {
-        window.removeEventListener('resize', onResize)
+        window.removeEventListener('resize', clampIntoWindow)
         if (endDrag.current !== null) endDrag.current()
         if (widenTimer !== null) {
           clearTimeout(widenTimer)
@@ -1375,6 +1431,10 @@ function applyFeature(host) {
         window.removeEventListener('pointerup', onUp)
         window.removeEventListener('pointercancel', onUp)
         endDrag.current = null
+        // The hand has come off and the card is where the reader wants it.
+        // Only a drag that actually travelled is written: a press that never
+        // moved should not spend a spot nobody chose.
+        if (dragMoved.current) savePosition()
       }
       // The card can be wider than the window; the listeners are held so an
       // unmount mid-drag takes them back out instead of leaving them on
