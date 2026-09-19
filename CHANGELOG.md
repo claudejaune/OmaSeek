@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## omaseek-music
 
+### 0.2.6 - 2026-09-19
+
+#### Fixed
+
+- The visualization tooltip is back. The collapse work wrapped the card's contents in a clipped box, which cut off the "Pause / Resume visualization" tooltip that pops up above the meter
+
 ### 0.2.5 - 2026-09-19
 
 #### Added

@@ -117,9 +117,15 @@ var CSS = [
   // nothing inside moves sideways while the box slides — the collapse uncovers
   // and covers the same layout, and the byline never re-wraps mid-animation.
   '.omamusic-body{display:flex;flex-direction:column;align-items:stretch;flex:none;',
-  'width:272px;overflow:hidden;',
+  'width:272px;',
   'transition:width .2s cubic-bezier(.4,0,.2,1)}',
-  '.omamusic[data-collapsed="1"] .omamusic-body{width:40px}',
+  // A shut card holds 272px of content inside a 40px box, so it must clip.
+  // An open card at rest overflows nothing and must NOT clip: the meter's
+  // tooltip pops up and clean out of the card, and a clip here cut it off
+  // entirely. The clip is only truly needed while the box is mid-slide, so
+  // the script puts it on for the widening and takes it off when the slide
+  // ends -- see setCollapsed.
+  '.omamusic[data-collapsed="1"] .omamusic-body{width:40px;overflow:hidden}',
   // The byline fades instead of ending on a hard slice at the clip edge: out
   // at once on the way in, back only once the card is wide enough to hold it.
   '.omamusic-text{transition:opacity .12s ease-out .08s}',
@@ -1072,6 +1078,7 @@ export function applyFeature(host) {
     React.useEffect(function () { return subscribe(bump) }, [])
 
     var cardRef = React.useRef(null)
+    var bodyRef = React.useRef(null)
     var lineRef = React.useRef(null)
     var rangeRef = React.useRef(null)
     var readoutRef = React.useRef(null)
@@ -1173,6 +1180,22 @@ export function applyFeature(host) {
      * the window, so it is clamped here against the width it is about to have,
      * not the one it still has.
      */
+    /**
+     * Hold the clip on the body by hand for the length of a widening.
+     *
+     * Collapsing needs no help: the stylesheet clips a shut card whatever the
+     * width it is sliding through. Widening does, because the attribute flips
+     * to open on the first frame while the box is still 40px and the content
+     * inside it is still 272. Released when the slide ends -- an open card at
+     * rest overflows nothing, and leaving the clip on cuts off the meter's
+     * tooltip, which pops up and clean out of the card.
+     */
+    function clipBody(on) {
+      var body = bodyRef.current
+      if (body === null) return
+      body.style.overflow = on ? 'hidden' : ''
+    }
+
     function setCollapsed(next) {
       if (collapsed === next) return
       collapsed = next
@@ -1183,11 +1206,17 @@ export function applyFeature(host) {
       }
       fullTransport = false
       if (!next) {
+        clipBody(true)
         widenTimer = setTimeout(function () {
           widenTimer = null
           fullTransport = true
+          clipBody(false)
           announce()
         }, SLIDE_MS)
+      } else {
+        // Coming back to shut, drop any clip the script was holding so the
+        // stylesheet's own rule is the only thing deciding it.
+        clipBody(false)
       }
       keepOnScreen(next ? CARD_W.collapsed : CARD_W.expanded)
       announce()
@@ -1356,7 +1385,7 @@ export function applyFeature(host) {
       // the tip because it is painted above the card and the clip would take
       // it away with the rest, the rail because it has to hold its ground on
       // the right edge while the body slides under it.
-      h('div', { className: 'omamusic-body' },
+      h('div', { className: 'omamusic-body', ref: bodyRef },
         h('div', { className: 'omamusic-row' },
           // The mark, and nothing else. It used to be a button that played and
           // paused — which the transport right below it also does — so it is a
