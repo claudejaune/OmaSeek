@@ -17,13 +17,13 @@ https://github.com/user-attachments/assets/00b55a6a-9f12-4df9-be09-c113dfd9fb79
 If you use `npx @deepseek-ai/dsh web` to launch DSH, do this to install all three plugins:
 
 ```
-npx @deepseek-ai/dsh plugin --profile web add omaseek-themes omaseek-pixel omaseek-music
+npx @deepseek-ai/dsh plugin --profile web add omaseek-themes@latest omaseek-pixel@latest omaseek-music@latest
 ```
 
 OR, pick and choose. Eg., if you don't care about the music player, use this:
 
 ```
-npx @deepseek-ai/dsh plugin --profile web add omaseek-themes omaseek-pixel
+npx @deepseek-ai/dsh plugin --profile web add omaseek-themes@latest omaseek-pixel@latest
 ```
 
 Then restart the harness.
@@ -34,14 +34,14 @@ If you build `dsh` manually from source, run this to install all plugins:
 
 ```
 cd /path/to/deepseek-harness
-pnpm dsh plugin --profile web add omaseek-themes omaseek-pixel omaseek-music
+pnpm dsh plugin --profile web add omaseek-themes@latest omaseek-pixel@latest omaseek-music@latest
 ```
 
 OR, pick and choose. Eg., if you don't care about the music player, use this:
 
 ```
 cd /path/to/deepseek-harness
-pnpm dsh plugin --profile web add omaseek-themes omaseek-pixel
+pnpm dsh plugin --profile web add omaseek-themes@latest omaseek-pixel@latest
 ```
 
 ## Variables
