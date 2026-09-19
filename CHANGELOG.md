@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 ## omaseek-music
 
+### 0.2.4 - 2026-09-19
+
+#### Added
+
+- The card remembers the song it was on and how far into it. A refresh puts it back in place, paused, ready for one press — and a tab that gets killed outright still comes back within five seconds of the mark
+
+#### Changed
+
+- The artwork is no longer a play/pause button. It was the transport's job already; now it just shows the mark, drags the card, and shows the same hover tooltip as the rest of it
+
+#### Fixed
+
+- Long artist names no longer wrap onto a second line over the track name. The artist is now cut with an ellipsis the way the title always was, with the full name in the hover tooltip
+
+### 0.2.3 - 2026-09-19
+
+#### Added
+
+- The card can now be collapsed. A rail down its right edge folds it to the width of the Omarchy mark, with just the play/pause button under it — no title, no artist, no meter, no seek bar. The chevron points left while the card is open and right while it is shut, and says "Collapse" or "Expand" when you hover it
+- The fold is remembered across reloads, so a card you put away stays put
+
 ### 0.2.2 - 2026-09-16
 
 #### Added

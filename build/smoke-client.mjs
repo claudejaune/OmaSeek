@@ -331,6 +331,38 @@ const PACKAGES = [
         label: 'the resting card is anchored to the bottom edge',
         tracks: STATION, expectResting: '8px',
       },
+      {
+        // The rail shuts the card to its mark, and takes prev and next out of
+        // the flow with it — a shut card has one button, and it is the one
+        // that matters.
+        label: 'the rail shuts the card to its mark',
+        tracks: STATION, rail: true, expectShut: '1', expectTransport: '0',
+      },
+      {
+        // A card left shut comes back shut, and the rail opens it: the width
+        // goes at once, the two outer buttons only once the slide is over.
+        label: 'a shut card comes back shut, and opens whole',
+        tracks: STATION, shut: true, rail: true, expectShut: '0', expectTransport: '1',
+      },
+      {
+        // A song left partway comes back partway. The remembered length is
+        // what lets the line and the readout be right before the real one
+        // arrives, and the spot is carried to `loadedmetadata` rather than
+        // trusted to a silent clock that still reads zero until then.
+        label: 'a song left partway comes back partway',
+        tracks: STATION, play: true, audio: 'ok',
+        remembered: { file: 'second-song.mp3', position: 95, duration: 210 },
+        expectTrack: 'Second Song', expectResumeNear: 95,
+      },
+      {
+        // A song the station no longer has is not an error and says nothing:
+        // the card is simply at the top of the list, where it would have
+        // been anyway.
+        label: 'a remembered song that is gone leaves the card at the top',
+        tracks: STATION,
+        remembered: { file: 'gone-song.mp3', position: 120, duration: 200 },
+        expectTrack: 'First Song',
+      },
       { label: 'the station, and it plays', tracks: STATION, play: true, audio: 'ok', expectFailure: null, expectTrack: 'First Song' },
       {
         label: 'next walks the station', tracks: STATION, play: true, audio: 'ok',
@@ -620,6 +652,12 @@ async function runCase(pkg, testCase) {
   }
   // OmaPixel's two switches, as a reader left them before this page load.
   if (testCase.pixel !== undefined) store.set('omaseek.pixel', JSON.stringify(testCase.pixel))
+  // OmaMusic's rail, shut or open, as the reader left it.
+  if (testCase.shut !== undefined) store.set('omaseek.music', JSON.stringify({ collapsed: testCase.shut }))
+  // …and the song it was on, and how far into it.
+  if (testCase.remembered !== undefined) {
+    store.set('omaseek.music', JSON.stringify({ collapsed: false, track: testCase.remembered }))
+  }
 
   let stationCalls = 0
   globalThis.fetch = async (path) => {
@@ -744,8 +782,13 @@ async function runCase(pkg, testCase) {
   audioMode = testCase.audio === undefined ? 'ok' : testCase.audio
   if (testCase.click !== undefined) press(testCase.click, testCase.clicks)
   if (testCase.play === true) {
-    const play = nodes.find((node) => typeof node.props['aria-label'] === 'string'
-      && node.props['aria-label'].indexOf('Play the track') === 0
+    // The transport's middle button, found by its class rather than its
+    // label: that label toggles between Play and Pause depending on the
+    // state the card is already in, and the class does not. (The artwork used
+    // to be a play control too, and this looked for its label; it is a plain
+    // plate now, and the transport is the only thing that plays.)
+    const play = nodes.find((node) => typeof node.props.className === 'string'
+      && node.props.className.split(' ').includes('omamusic-tb-play')
       && typeof node.props.onClick === 'function')
     if (play === undefined) problems.push('no play control on the card')
     else {
@@ -755,6 +798,25 @@ async function runCase(pkg, testCase) {
         problems.push(`pressing play threw: ${error.message}`)
       }
       await new Promise((done) => setTimeout(done, 30))
+    }
+  }
+
+  // A press on the rail down the card's right edge, which shuts it to its
+  // mark or opens it again. The label says which way the press will go, so
+  // the same action serves both directions.
+  if (testCase.rail === true) {
+    const rail = nodes.find((node) => typeof node.props['aria-label'] === 'string'
+      && (node.props['aria-label'] === 'Collapse the player'
+        || node.props['aria-label'] === 'Expand the player')
+      && typeof node.props.onClick === 'function')
+    if (rail === undefined) problems.push('no collapse rail on the card')
+    else {
+      try {
+        rail.props.onClick()
+      } catch (error) {
+        problems.push(`pressing the rail threw: ${error.message}`)
+      }
+      await new Promise((done) => setTimeout(done, 5))
     }
   }
 
@@ -799,6 +861,45 @@ async function runCase(pkg, testCase) {
     if (style === undefined || style.bottom !== testCase.expectResting || style.top !== undefined) {
       problems.push(`the resting card is at ${JSON.stringify(style)}, `
         + `expected a bottom of ${testCase.expectResting} and no top`)
+    }
+  }
+
+  // The rail's two flags. They are deliberately not the same thing on the way
+  // out: prev and next leave the flow with the first frame of a collapse and
+  // come back only once the card has finished widening, so a case that reads
+  // them waits out the slide rather than catching the card mid-animation.
+  if (testCase.expectShut !== undefined || testCase.expectTransport !== undefined) {
+    if (testCase.expectTransport !== undefined) {
+      await new Promise((done) => setTimeout(done, 260))
+    }
+    const card = calls.registered.find((entry) => entry.options.name === 'shell.overlay')
+    const rendered = card === undefined ? [] : nodesOf(React.createElement(card.component, {}))
+    const named = (name) => rendered.find((node) => node.props !== undefined
+      && typeof node.props.className === 'string'
+      && node.props.className.split(' ').includes(name))
+    const root = named('omamusic')
+    const shut = root === undefined ? undefined : root.props['data-collapsed']
+    if (testCase.expectShut !== undefined && shut !== testCase.expectShut) {
+      problems.push(`the card's collapse flag is ${String(shut)}, expected ${String(testCase.expectShut)}`)
+    }
+    if (testCase.expectTransport !== undefined) {
+      const transport = named('omamusic-transport')
+      const full = transport === undefined ? undefined : transport.props['data-full']
+      if (full !== testCase.expectTransport) {
+        problems.push(`the transport is ${String(full)}, expected ${String(testCase.expectTransport)}`)
+      }
+    }
+  }
+
+  // Where a remembered card picked up. Read off the element rather than the
+  // readout, which the frame loop paints and the smoke harness never runs.
+  // A second of slack: the silent clock has been running since the restore,
+  // so the spot lands a few milliseconds past where it was written.
+  if (testCase.expectResumeNear !== undefined) {
+    const landed = lastAudio === null ? null : lastAudio.currentTime
+    if (landed === null || Math.abs(landed - testCase.expectResumeNear) > 1) {
+      problems.push(`the card resumed at ${String(landed)}, `
+        + `expected within a second of ${testCase.expectResumeNear}`)
     }
   }
 

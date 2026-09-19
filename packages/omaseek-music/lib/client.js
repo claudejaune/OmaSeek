@@ -141,6 +141,12 @@ exports["createNotifier"] = createNotifier
  * Browsers will not autoplay sound without a gesture, so the card starts paused
  * and waits for a press.
  *
+ * The card also shuts. A rail down its right edge folds it to the width of its
+ * own mark — the Omarchy picture and a play button, nothing else said — for
+ * whoever would rather have the desk space back. Which way it was left is
+ * remembered in the browser, because the card is a fixture over every session
+ * rather than a thing to be met fresh each time.
+ *
  * Plain JavaScript ESM, because `build/bundle-client.mjs` rewrites it into the
  * page's closure factory: `react` comes off the module table the shell seeds,
  * and every other module is relative to this directory. No JSX.
@@ -214,13 +220,37 @@ var CSS = [
   'border:1px solid var(--dsw-alias-border-l1);',
   'background:color-mix(in srgb, var(--dsw-alias-bg-base) 85%, transparent);',
   'backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);',
+  'transition:width .2s cubic-bezier(.4,0,.2,1);',
   'pointer-events:auto;touch-action:none;user-select:none;cursor:move}',
+  // Shut, the card is the mark and the rail that opens it again: 40px of art
+  // and 18px of rail, inside the two borders. The two widths are also in the
+  // script, because a toggle has to keep the card on screen before the slide
+  // has given it a size to measure.
+  '.omamusic[data-collapsed="1"]{width:60px}',
+  // The body keeps the expanded width and is clipped rather than reflowed, so
+  // nothing inside moves sideways while the box slides — the collapse uncovers
+  // and covers the same layout, and the byline never re-wraps mid-animation.
+  '.omamusic-body{display:flex;flex-direction:column;align-items:stretch;flex:none;',
+  'width:272px;overflow:hidden;',
+  'transition:width .2s cubic-bezier(.4,0,.2,1)}',
+  '.omamusic[data-collapsed="1"] .omamusic-body{width:40px}',
+  // The byline fades instead of ending on a hard slice at the clip edge: out
+  // at once on the way in, back only once the card is wide enough to hold it.
+  '.omamusic-text{transition:opacity .12s ease-out .08s}',
+  '.omamusic[data-collapsed="1"] .omamusic-text{opacity:0;transition-delay:0s}',
+  // A shut card has nothing to seek in and nothing to read off the meter, and
+  // both are live controls — hidden, not merely out of sight.
+  '.omamusic[data-collapsed="1"] .omamusic-seek,',
+  '.omamusic[data-collapsed="1"] .omamusic-line{display:none}',
   // The 2px under the row is the clearance the progress line wants above the
   // transport's top border; the line itself sits on the row's foot.
   '.omamusic-row{display:flex;height:46px;align-items:stretch;position:relative;margin-bottom:2px}',
   '.omamusic button,.omamusic input{cursor:pointer}',
-  // The artwork: the mark, and nothing drawn over it.
-  '.omamusic-art{position:relative;width:40px;height:40px;flex:none;align-self:flex-start;padding:0;',
+  // The artwork: the mark, and nothing drawn over it. Bordered inside its own
+  // 40px so the collapsed card, which is exactly the mark wide, does not
+  // shave a pixel off the picture.
+  '.omamusic-art{position:relative;box-sizing:border-box;width:40px;height:40px;flex:none;',
+  'align-self:flex-start;padding:0;',
   'border:none;border-right:1px solid var(--dsw-alias-border-l1);background:#000 center/cover no-repeat}',
   // Title over artist; hovering the seek swaps the artist for the readout.
   '.omamusic-text{display:flex;flex-direction:column;justify-content:center;flex:1 1 auto;',
@@ -228,7 +258,15 @@ var CSS = [
   'min-width:0;line-height:1.2}',
   '.omamusic-title{font-size:12px;font-weight:500;color:var(--dsw-alias-label-primary);',
   'white-space:nowrap;max-width:34ch;overflow:hidden;text-overflow:ellipsis}',
-  '.omamusic-byline{position:relative;margin-top:2px;font-size:12px;color:var(--dsw-alias-label-secondary)}',
+  // The byline is cut exactly as the title is: one line, ellipsised. It had
+  // none of that, so a long artist — "Jon Håvard Gundersen" is twenty
+  // characters into a hundred and thirty of room — wrapped to a second line
+  // and laid it over the title inside a row that is forty-six pixels tall and
+  // does not grow. The readout is absolutely positioned inside this box, so
+  // the clip never touches it, and the full name is in the hover tip either way.
+  '.omamusic-byline{position:relative;margin-top:2px;font-size:12px;min-width:0;',
+  'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;',
+  'color:var(--dsw-alias-label-secondary)}',
   '.omamusic-artist,.omamusic-readout{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}',
   '.omamusic-readout{position:absolute;inset:0;opacity:0;transition:opacity .15s ease-out}',
   '.omamusic-artist{transition:opacity .15s ease-out}',
@@ -282,6 +320,16 @@ var CSS = [
   '.omamusic-tb:focus-visible{outline:1px solid var(--dsw-alias-brand-primary);outline-offset:-2px}',
   '.omamusic-tb[aria-disabled="true"]{opacity:.4}',
   '.omamusic-tb-play{color:var(--dsw-alias-label-primary)}',
+  // prev and next leave the flow the moment a collapse starts and come back
+  // only once the card is wide again. Three flex buttons squeezed into 40px
+  // would show a crushed glyph for the whole slide; taken out, the play
+  // button is the only one left and it is already where it wants to be — the
+  // middle of three and the whole of one share a centre.
+  '.omamusic-transport[data-full="0"] .omamusic-tb-prev,',
+  '.omamusic-transport[data-full="0"] .omamusic-tb-next{display:none}',
+  '.omamusic-transport[data-full="1"] .omamusic-tb-prev,',
+  '.omamusic-transport[data-full="1"] .omamusic-tb-next{animation:omamusic-in .18s ease-out}',
+  '@keyframes omamusic-in{from{opacity:0}to{opacity:1}}',
   // The label the station puts on a song that swears, kept small enough to
   // sit between the byline and the meter without pushing either aside.
   '.omamusic-e{flex:none;align-self:center;padding:0 4px;border:1px solid var(--dsw-alias-border-l1);',
@@ -296,6 +344,27 @@ var CSS = [
   'padding:0;pointer-events:none;',
   'font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;',
   'color:var(--dsw-alias-label-secondary)}',
+  // The collapse rail: one column the full height of the card, stuck to its
+  // right edge. It is outside the clipped body rather than inside it, so it
+  // stays put and stays clickable whatever width the card is sliding through.
+  '.omamusic-collapse{position:absolute;right:0;top:0;bottom:0;width:18px;',
+  'display:flex;align-items:center;justify-content:center;padding:0;',
+  'border:none;border-left:1px solid var(--dsw-alias-border-l1);background:transparent;',
+  'color:var(--dsw-alias-label-secondary)}',
+  '.omamusic-collapse:hover{background:rgba(128,128,128,.12);color:var(--dsw-alias-label-primary)}',
+  '.omamusic-collapse:focus-visible{outline:1px solid var(--dsw-alias-brand-primary);outline-offset:-2px}',
+  '.omamusic-collapse-icon{display:block;width:14px;height:14px;flex:none}',
+  // Its own tip, above the rail and right-aligned to it: a tip to the right of
+  // the rail would hang off the edge of the window the card is parked against.
+  '.omamusic-collapse-tip{position:absolute;right:0;bottom:calc(100% + 8px);',
+  'padding:6px 8px;border:1px solid var(--dsw-alias-border-l1);',
+  'background:var(--dsw-specific-tip, var(--dsw-alias-bg-overlay));',
+  'box-shadow:0 4px 16px rgba(0,0,0,.25);opacity:0;pointer-events:none;white-space:nowrap;',
+  'font-size:11px;color:var(--dsw-alias-label-primary);transition:opacity .15s ease-out}',
+  '.omamusic-collapse:hover .omamusic-collapse-tip{opacity:1;transition-delay:.4s}',
+  // The rail's tip replaces the card's while the rail is hovered, the way the
+  // meter's does — one tip on the card at a time.
+  '.omamusic:has(.omamusic-collapse:hover) .omamusic-tip{opacity:0;transition-delay:0s}',
 ].join('\n')
 
 /**
@@ -339,6 +408,26 @@ function glyphIcon(name) {
     viewBox: '0 0 12 10', width: 12 * SCALE, height: 10 * SCALE,
     fill: 'currentColor', 'shape-rendering': 'crispEdges', 'aria-hidden': 'true',
   }, rects)
+}
+
+/**
+ * The rail's glyph: the chevron from `assets/chevron-left.svg` and
+ * `assets/chevron-right.svg`, inlined. Inlined rather than loaded because the
+ * browser half has no asset pipeline — and because those files carry
+ * `stroke="#ffffff"`, which would sit invisible on a dark theme. Painted with
+ * `currentColor` instead, it follows the same token the transport buttons
+ * already take, so an Omarchy palette and the harness's own dark and light
+ * both colour it without this package knowing which is in force.
+ */
+var CHEVRON_PATH = { left: 'm15 18-6-6 6-6', right: 'm9 18 6-6-6-6' }
+
+function chevronIcon(dir) {
+  return h('svg', {
+    className: 'omamusic-collapse-icon',
+    viewBox: '0 0 24 24', width: 14, height: 14,
+    fill: 'none', stroke: 'currentColor', 'stroke-width': 2,
+    'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true',
+  }, h('path', { d: CHEVRON_PATH[dir] === undefined ? CHEVRON_PATH.left : CHEVRON_PATH[dir] }))
 }
 
 function applyFeature(host) {
@@ -410,6 +499,171 @@ function applyFeature(host) {
   /** Whether the meter is held by hand — clicking it freezes, clicking
    *  again lets it run. Sound and progress carry on either way. */
   var vizPaused = false
+
+  /**
+   * What the browser is asked to remember, in one key: whether the card was
+   * shut, and which song it was on and how far into it. The card floats over
+   * every session, so both are things a reader expects to find as they left
+   * them. A storage that will not answer — private mode, a denied quota — is
+   * a memory for this page only, not a failure.
+   *
+   * One key rather than two because the two halves are written at different
+   * times by different code, and a write that carried only the fold would
+   * forget the song, and one that carried only the song would open the card
+   * back up on the next load. Every write goes through `writeMemory`, which
+   * puts down both.
+   */
+  var MEMORY_KEY = 'omaseek.music'
+  var memory = readMemory()
+  var collapsed = memory.collapsed === true
+  /**
+   * Whether the transport is showing all three buttons. It goes false with
+   * the first frame of a collapse and true again only after the card has
+   * finished widening — see the `data-full` rule.
+   */
+  var fullTransport = !collapsed
+  /** The timer holding prev and next out until the card is wide again. */
+  var widenTimer = null
+  /**
+   * The card's own width in each state. The stylesheet owns these; the script
+   * needs them because a toggle must keep the card on screen before the slide
+   * has given it a width to measure, and `getBoundingClientRect` mid-slide
+   * answers with the width it is leaving.
+   */
+  var CARD_W = { expanded: 292, collapsed: 60 }
+  /** The slide's length, matching the stylesheet's own transition. */
+  var SLIDE_MS = 200
+  /** How far a scrub is held back before it is written down. */
+  var WRITE_DEBOUNCE = 1000
+  /** How often a running card repeats where it is. See `heartbeat`. */
+  var HEARTBEAT_MS = 5000
+
+  /**
+   * The remembered song, or nothing. What comes back out of storage is never
+   * trusted: it is whatever a previous version wrote there, or whatever a
+   * reader typed into their own console, so each field is taken on only if it
+   * is the kind of thing it claims to be.
+   */
+  function readTrackMemory(track) {
+    if (track === null || typeof track !== 'object') return null
+    if (typeof track.file !== 'string' || track.file === '') return null
+    var position = Number(track.position)
+    var length = Number(track.duration)
+    return {
+      file: track.file,
+      position: isFinite(position) && position > 0 ? position : 0,
+      duration: isFinite(length) && length > 0 ? length : 0,
+    }
+  }
+
+  function readMemory() {
+    var blank = { collapsed: false, track: null }
+    try {
+      var raw = window.localStorage.getItem(MEMORY_KEY)
+      if (raw === null) return blank
+      var saved = JSON.parse(raw)
+      if (saved === null || typeof saved !== 'object') return blank
+      return { collapsed: saved.collapsed === true, track: readTrackMemory(saved.track) }
+    } catch (unavailable) {
+      return blank
+    }
+  }
+
+  function writeMemory() {
+    try {
+      window.localStorage.setItem(MEMORY_KEY, JSON.stringify({
+        collapsed: collapsed,
+        track: memory.track,
+        savedAt: Date.now(),
+      }))
+    } catch (unavailable) {
+      // As above: a memory that cannot be written is not an error.
+    }
+  }
+
+  /**
+   * Note where the card is. The position is passed in rather than read off
+   * the clock, because at the moments that call this the clock is not always
+   * the truth — after a track change the element still holds the *previous*
+   * song's position until the new one is loaded, and the new song starts at
+   * its top, not there.
+   */
+  function remember(position) {
+    var track = current()
+    if (track === null || typeof track.file !== 'string' || track.file === '') {
+      memory.track = null
+      return
+    }
+    memory.track = {
+      file: track.file,
+      position: position > 0 ? position : 0,
+      duration: duration,
+    }
+  }
+
+  /** A write held back so a scrub does not put one down per step. */
+  var writeTimer = null
+  function rememberSoon(position) {
+    remember(position)
+    if (writeTimer !== null) return
+    writeTimer = setTimeout(function () {
+      writeTimer = null
+      writeMemory()
+    }, WRITE_DEBOUNCE)
+  }
+
+  /** Whatever was pending, written now. */
+  function rememberNow(position) {
+    if (writeTimer !== null) {
+      clearTimeout(writeTimer)
+      writeTimer = null
+    }
+    remember(position)
+    writeMemory()
+  }
+
+  /**
+   * The song and spot the last page left, carried until that track's own
+   * length arrives. Carried because the silent clock answers zero while
+   * `duration` is still zero, and `loadedmetadata` recomputes the clock from
+   * the element's position — which on a fresh element is zero, and would
+   * wipe the restored spot before it was ever drawn.
+   */
+  var pending = null
+  /** Whether the one restore has been spent. */
+  var restored = false
+
+  /**
+   * Put the card back on the song the last page was on.
+   *
+   * Asked once, of the first answer: a later re-fetch of the catalogue must
+   * not drag the card back out from under whoever has moved it on since. A
+   * song that is no longer in the station is not an error and says nothing —
+   * the card is simply at the top of the list, which is where it would have
+   * been anyway.
+   */
+  function restoreTrack() {
+    if (restored) return
+    restored = true
+    var want = memory.track
+    if (want === null) return
+    for (var i = 0; i < queue.length; i += 1) {
+      if (queue[i].file !== want.file) continue
+      index = i
+      // The remembered length stands in until the real one lands. It is what
+      // lets the progress line and the readout be right on the first paint
+      // rather than for a moment showing the top of a song that is not there.
+      if (want.duration > 0) duration = want.duration
+      var at = want.duration > 0
+        ? Math.min(want.position, Math.max(0, want.duration - 0.5))
+        : want.position
+      if (at > 0) {
+        pending = at
+        clockZero = performance.now() - at * 1000
+      }
+      return
+    }
+  }
 
   var notifier = createNotifier()
   var announce = notifier.notify
@@ -610,7 +864,17 @@ function applyFeature(host) {
     audio.addEventListener('loadedmetadata', function () {
       if (isFinite(audio.duration) && audio.duration > 0) {
         duration = audio.duration
-        clockZero = performance.now() - audio.currentTime * 1000
+        var at = audio.currentTime
+        // A spot carried over from the last page is spent here, and spent on
+        // the track's real length rather than the remembered one. Seeking a
+        // fresh element is legal because the station answers range requests;
+        // without that, the spot would have to wait for the sound to start.
+        if (pending !== null) {
+          at = Math.max(0, Math.min(pending, duration - 0.5))
+          pending = null
+          if (audio.currentTime !== at) audio.currentTime = at
+        }
+        clockZero = performance.now() - at * 1000
         announce()
       }
     })
@@ -694,6 +958,9 @@ function applyFeature(host) {
     wantPlaying = false
     if (audio !== null) audio.pause()
     if (state !== 'failed') state = 'paused'
+    // Where it stopped is where the next load should pick it up, so this is
+    // written down rather than left to the heartbeat.
+    rememberNow(timeNow())
     announce()
   }
 
@@ -715,6 +982,10 @@ function applyFeature(host) {
     endedByItself = true
     duration = 0
     clockZero = performance.now()
+    // A carried-over spot belongs to the song it was carried for, not to the
+    // one that just came round.
+    pending = null
+    rememberNow(0)
     if (wantPlaying) start(true)
     else {
       load(current(), true)
@@ -735,6 +1006,11 @@ function applyFeature(host) {
     step(by)
     duration = 0
     clockZero = performance.now()
+    pending = null
+    // The press is the reader moving the card, so the memory follows it at
+    // once: a refresh a second later should not put them back on the song
+    // they just left.
+    rememberNow(0)
     announce()
     start(false)
   }
@@ -758,6 +1034,10 @@ function applyFeature(host) {
     // the silent clock in any case, so the two agree if sound returns.
     if (audio !== null) audio.currentTime = at
     clockZero = performance.now() - at * 1000
+    // Debounced: a drag down the line is a hundred positions a second, and
+    // only the last of them is the one that was asked for.
+    pending = null
+    rememberSoon(at)
   }
 
   // The catalogue's arrival is what the card walks through: the station's own
@@ -770,6 +1050,10 @@ function applyFeature(host) {
     // The whole station wears one mark, so it arrives once with the playlist
     // rather than on each of its songs.
     stationArt = typeof result.art === 'string' ? result.art : ''
+    // The card goes back to the song the last page was on, if it still has
+    // it. Before the sound is considered, so a card that was left playing
+    // still comes back paused and in place rather than starting from zero.
+    restoreTrack()
     // A press that was waiting on this answer is what asked for it, so the
     // sound it wanted starts now that there is something to start.
     if (wantPlaying) start(false)
@@ -835,6 +1119,29 @@ function applyFeature(host) {
 
   ctx.effect(function () { return insertSheet(CSS, 'omamusic:cards') }, 'omamusic: styles')
 
+  // Where the card is gets written down on the way out. `pagehide` rather than
+  // `beforeunload`: it is the one that still fires when the browser puts the
+  // page in the back-forward cache, and it is the last word the page gets.
+  ctx.effect(function () {
+    function onHide() { rememberNow(timeNow()) }
+    window.addEventListener('pagehide', onHide)
+    return function () { window.removeEventListener('pagehide', onHide) }
+  }, 'omamusic: remembered on pagehide')
+
+  /**
+   * A heartbeat while the sound is running, so a tab that is killed outright
+   * — no `pagehide`, no goodbye, no chance to say where it got to — still
+   * comes back within five seconds of the mark rather than at the last place
+   * anything was deliberately written. Only a running card beats; a paused
+   * one has nothing to lose.
+   */
+  ctx.effect(function () {
+    var beat = setInterval(function () {
+      if (wantPlaying) rememberNow(timeNow())
+    }, HEARTBEAT_MS)
+    return function () { clearInterval(beat) }
+  }, 'omamusic: playback heartbeat')
+
   // ---------------------------------------------------------------
   // The card. Visual port of MusicControl.tsx, plus two things the
   // site does not do: it floats in the shell overlay, and it drags.
@@ -872,6 +1179,63 @@ function applyFeature(host) {
      * a transport row, so the resting card keeps no number at all.
      */
     var home = React.useRef(null)
+
+    /**
+     * Hold the card inside the window at a width it has not reached yet.
+     *
+     * A card that has never been moved rests on the stylesheet's own anchor
+     * 20px from the left, which cannot overflow unless the window is nearly as
+     * narrow as the card — and only a widening gets near that. So the resting
+     * card is only taken in hand when the clamp actually bites.
+     */
+    function keepOnScreen(width) {
+      var card = cardRef.current
+      if (card === null) return
+      var box = card.getBoundingClientRect()
+      var left = clampToViewport(box.left, width, window.innerWidth)
+      if (home.current === null && left === box.left) return
+      home.current = { left: left, top: box.top }
+      card.style.left = left + 'px'
+      card.style.top = box.top + 'px'
+      // The card rested on the stylesheet's bottom anchor; it is placed by
+      // number from here. Leaving both set would stretch it to the gap.
+      card.style.bottom = ''
+    }
+
+    /**
+     * Open or shut the card.
+     *
+     * The width transition is what the eye follows. The transport's two outer
+     * buttons are the one thing that cannot ride along — three flex buttons in
+     * a 40px box is a crushed glyph for the whole slide — so they go with the
+     * collapse and come back only once the card has widened. Taking them out
+     * costs the play button nothing: the middle of three and the whole of one
+     * share a centre, so it slides rather than jumps.
+     *
+     * Widening is also the one moment the card can push itself off the right of
+     * the window, so it is clamped here against the width it is about to have,
+     * not the one it still has.
+     */
+    function setCollapsed(next) {
+      if (collapsed === next) return
+      collapsed = next
+      writeMemory()
+      if (widenTimer !== null) {
+        clearTimeout(widenTimer)
+        widenTimer = null
+      }
+      fullTransport = false
+      if (!next) {
+        widenTimer = setTimeout(function () {
+          widenTimer = null
+          fullTransport = true
+          announce()
+        }, SLIDE_MS)
+      }
+      keepOnScreen(next ? CARD_W.collapsed : CARD_W.expanded)
+      announce()
+    }
+
     // A drag that is still in flight when the card unmounts would leave its
     // window listeners holding a detached element, and a seek caught mid-drag
     // would keep the line frozen for the rest of the page's life.
@@ -894,6 +1258,16 @@ function applyFeature(host) {
       return function () {
         window.removeEventListener('resize', onResize)
         if (endDrag.current !== null) endDrag.current()
+        if (widenTimer !== null) {
+          clearTimeout(widenTimer)
+          widenTimer = null
+        }
+        // A write still held back by the scrub debounce would outlive the card
+        // and put down a position nothing is driving any more.
+        if (writeTimer !== null) {
+          clearTimeout(writeTimer)
+          writeTimer = null
+        }
         scrubbing.current = false
       }
     }, [])
@@ -1011,12 +1385,12 @@ function applyFeature(host) {
       window.addEventListener('pointercancel', onUp)
     }
 
-    var on = sounding()
     var playing = wantPlaying && state !== 'failed'
     var art = stationArt
     var fromStation = queue.length > 1
     return h('div', {
       className: 'omamusic',
+      'data-collapsed': collapsed ? '1' : '0',
       'data-seek': atSeek ? '1' : null,
       ref: cardRef,
       onPointerDown: onPointerDown,
@@ -1027,126 +1401,148 @@ function applyFeature(host) {
         ? { left: '20px', bottom: '8px' }
         : { left: home.current.left + 'px', top: home.current.top + 'px' },
     },
-      h('div', { className: 'omamusic-row' },
-        // Still a button — the largest target on the card, and it plays and
-        // pauses — but it draws nothing over the mark.
-        h('button', {
-          className: 'omamusic-art',
-          type: 'button',
-          'aria-pressed': on,
-          'aria-label': on ? 'Pause the track' : 'Play the track',
-          title: on ? 'Pause' : 'Play',
-          style: art === '' ? null : { backgroundImage: 'url(' + art + ')' },
-          onClick: function () {
-            if (dragMoved.current) return
-            toggle()
-          },
-        }),
-        h('span', { className: 'omamusic-tip', 'aria-hidden': 'true' },
-          h('span', { className: 'omamusic-tip-title' }, title()),
-          h('span', { className: 'omamusic-tip-artist' }, artist())),
-        h('span', { className: 'omamusic-text' },
-          h('span', { className: 'omamusic-title' },
-            state === 'failed' ? failure : shortTitle(title())),
-          h('span', { className: 'omamusic-byline' },
-            h('span', { className: 'omamusic-artist' }, artist()),
-            h('span', { 'aria-hidden': 'true', ref: readoutRef, className: 'omamusic-readout' }))),
-        // The station labels the songs that swear, and the label is the
-        // playlist's own field — the card only has to say so.
-        current() !== null && current().explicit === true
-          ? h('span', { className: 'omamusic-e', title: 'Explicit' }, 'E')
-          : null,
-        fromStation ? h('span', { className: 'omamusic-count' }, (index + 1) + '/' + queue.length) : null,
-        h('button', {
-          type: 'button',
-          className: 'omamusic-meter',
-          'aria-pressed': vizPaused,
-          'aria-label': vizPaused ? 'Resume visualization' : 'Pause visualization',
-          onClick: function () {
-            if (dragMoved.current) return
-            vizPaused = !vizPaused
-            announce()
-          },
-        },
-          [0, 1, 2, 3].map(function (i) {
-            return h('span', {
-              key: i,
-              ref: function (el) { barsRef.current[i] = el },
-              className: 'omamusic-bar',
-            })
+      // The body is what gets shut: everything the card has to say, in a
+      // column the clip can close over. The tip and the rail sit outside it —
+      // the tip because it is painted above the card and the clip would take
+      // it away with the rest, the rail because it has to hold its ground on
+      // the right edge while the body slides under it.
+      h('div', { className: 'omamusic-body' },
+        h('div', { className: 'omamusic-row' },
+          // The mark, and nothing else. It used to be a button that played and
+          // paused — which the transport right below it also does — so it is a
+          // plain plate now: it drags the card like any other part of it, and
+          // the card's own hover tip is already what it shows.
+          h('div', {
+            className: 'omamusic-art',
+            'aria-hidden': 'true',
+            style: art === '' ? null : { backgroundImage: 'url(' + art + ')' },
           }),
-          h('span', { className: 'omamusic-viz-tip', 'aria-hidden': 'true' },
-            vizPaused ? 'Resume visualization' : 'Pause visualization')),
-        h('span', {
-          'aria-hidden': 'true', ref: lineRef, className: 'omamusic-line',
-          style: { transform: 'scaleX(0)' },
-        }),
-        h('input', {
-          ref: rangeRef,
-          type: 'range',
-          className: 'omamusic-seek',
-          min: 0,
-          max: 1000,
-          step: 5,
-          defaultValue: 0,
-          'aria-label': 'Position in the track',
-          onPointerDown: function () { scrubbing.current = true },
-          onPointerUp: function () { scrubbing.current = false },
-          onPointerCancel: function () { scrubbing.current = false },
-          onLostPointerCapture: function () { scrubbing.current = false },
-          onInput: function (event) { onScrub(Number(event.currentTarget.value)) },
-          // The byline swaps to the clock while a pointer is on the line.
-          onPointerEnter: function () { onSeekHover(true) },
-          onPointerLeave: function () { onSeekHover(false) },
-          // A range input answers a drag and the arrow keys, but a plain press
-          // on the track leaves its value where it was — so the line would look
-          // seekable everywhere and only work under a finger that kept moving.
-          // Where the press landed is the position asked for, worked out from
-          // the element's own box so a card that has been dragged still seeks
-          // where it was pressed.
-          onClick: function (event) {
-            var range = event.currentTarget
-            var box = range.getBoundingClientRect()
-            if (box.width <= 0) return
-            var at = Math.max(0, Math.min(1, (event.clientX - box.left) / box.width))
-            onScrub(Math.round(at * Number(range.max)))
+          h('span', { className: 'omamusic-text' },
+            h('span', { className: 'omamusic-title' },
+              state === 'failed' ? failure : shortTitle(title())),
+            h('span', { className: 'omamusic-byline' },
+              h('span', { className: 'omamusic-artist' }, artist()),
+              h('span', { 'aria-hidden': 'true', ref: readoutRef, className: 'omamusic-readout' }))),
+          // The station labels the songs that swear, and the label is the
+          // playlist's own field — the card only has to say so.
+          current() !== null && current().explicit === true
+            ? h('span', { className: 'omamusic-e', title: 'Explicit' }, 'E')
+            : null,
+          fromStation ? h('span', { className: 'omamusic-count' }, (index + 1) + '/' + queue.length) : null,
+          h('button', {
+            type: 'button',
+            className: 'omamusic-meter',
+            'aria-pressed': vizPaused,
+            'aria-label': vizPaused ? 'Resume visualization' : 'Pause visualization',
+            onClick: function () {
+              if (dragMoved.current) return
+              vizPaused = !vizPaused
+              announce()
+            },
           },
-        })),
-      // The deck's own transport, in the same order: back, play, forward.
-      // prev and next are presses; only the middle one is a state.
-      h('div', { className: 'omamusic-transport' },
-        h('button', {
-          type: 'button',
-          className: 'omamusic-tb',
-          'aria-label': 'Previous track',
-          title: 'Previous track',
-          'aria-disabled': fromStation ? null : 'true',
-          onClick: function () {
-            if (dragMoved.current) return
-            go(-1)
-          },
-        }, glyphIcon('prev')),
-        h('button', {
-          type: 'button',
-          className: 'omamusic-tb omamusic-tb-play',
-          'aria-label': playing ? 'Pause' : 'Play',
-          title: playing ? 'Pause' : 'Play',
-          onClick: function () {
-            if (dragMoved.current) return
-            toggle()
-          },
-        }, glyphIcon(playing ? 'pause' : 'play')),
-        h('button', {
-          type: 'button',
-          className: 'omamusic-tb',
-          'aria-label': 'Next track',
-          title: 'Next track',
-          'aria-disabled': fromStation ? null : 'true',
-          onClick: function () {
-            if (dragMoved.current) return
-            go(1)
-          },
-        }, glyphIcon('next'))))
+            [0, 1, 2, 3].map(function (i) {
+              return h('span', {
+                key: i,
+                ref: function (el) { barsRef.current[i] = el },
+                className: 'omamusic-bar',
+              })
+            }),
+            h('span', { className: 'omamusic-viz-tip', 'aria-hidden': 'true' },
+              vizPaused ? 'Resume visualization' : 'Pause visualization')),
+          h('span', {
+            'aria-hidden': 'true', ref: lineRef, className: 'omamusic-line',
+            style: { transform: 'scaleX(0)' },
+          }),
+          h('input', {
+            ref: rangeRef,
+            type: 'range',
+            className: 'omamusic-seek',
+            min: 0,
+            max: 1000,
+            step: 5,
+            defaultValue: 0,
+            'aria-label': 'Position in the track',
+            onPointerDown: function () { scrubbing.current = true },
+            onPointerUp: function () { scrubbing.current = false },
+            onPointerCancel: function () { scrubbing.current = false },
+            onLostPointerCapture: function () { scrubbing.current = false },
+            onInput: function (event) { onScrub(Number(event.currentTarget.value)) },
+            // The byline swaps to the clock while a pointer is on the line.
+            onPointerEnter: function () { onSeekHover(true) },
+            onPointerLeave: function () { onSeekHover(false) },
+            // A range input answers a drag and the arrow keys, but a plain press
+            // on the track leaves its value where it was — so the line would look
+            // seekable everywhere and only work under a finger that kept moving.
+            // Where the press landed is the position asked for, worked out from
+            // the element's own box so a card that has been dragged still seeks
+            // where it was pressed.
+            onClick: function (event) {
+              var range = event.currentTarget
+              var box = range.getBoundingClientRect()
+              if (box.width <= 0) return
+              var at = Math.max(0, Math.min(1, (event.clientX - box.left) / box.width))
+              onScrub(Math.round(at * Number(range.max)))
+            },
+          })),
+        // The deck's own transport, in the same order: back, play, forward.
+        // prev and next are presses; only the middle one is a state. Shut, it
+        // is the middle one alone, and `data-full` is what takes the other two
+        // out of the flow — see the rule and the reason on it.
+        h('div', {
+          className: 'omamusic-transport',
+          'data-full': fullTransport ? '1' : '0',
+        },
+          h('button', {
+            type: 'button',
+            className: 'omamusic-tb omamusic-tb-prev',
+            'aria-label': 'Previous track',
+            title: 'Previous track',
+            'aria-disabled': fromStation ? null : 'true',
+            onClick: function () {
+              if (dragMoved.current) return
+              go(-1)
+            },
+          }, glyphIcon('prev')),
+          h('button', {
+            type: 'button',
+            className: 'omamusic-tb omamusic-tb-play',
+            'aria-label': playing ? 'Pause' : 'Play',
+            title: playing ? 'Pause' : 'Play',
+            onClick: function () {
+              if (dragMoved.current) return
+              toggle()
+            },
+          }, glyphIcon(playing ? 'pause' : 'play')),
+          h('button', {
+            type: 'button',
+            className: 'omamusic-tb omamusic-tb-next',
+            'aria-label': 'Next track',
+            title: 'Next track',
+            'aria-disabled': fromStation ? null : 'true',
+            onClick: function () {
+              if (dragMoved.current) return
+              go(1)
+            },
+          }, glyphIcon('next')))),
+      h('span', { className: 'omamusic-tip', 'aria-hidden': 'true' },
+        h('span', { className: 'omamusic-tip-title' }, title()),
+        h('span', { className: 'omamusic-tip-artist' }, artist())),
+      // The rail: a button the whole height of the card, so the press is easy
+      // to hit from either end. It drags the card like any other part of it,
+      // and the toggle fires only if the hand did not travel.
+      h('button', {
+        type: 'button',
+        className: 'omamusic-collapse',
+        'aria-expanded': collapsed ? 'false' : 'true',
+        'aria-label': collapsed ? 'Expand the player' : 'Collapse the player',
+        onClick: function () {
+          if (dragMoved.current) return
+          setCollapsed(!collapsed)
+        },
+      },
+        chevronIcon(collapsed ? 'right' : 'left'),
+        h('span', { className: 'omamusic-collapse-tip', 'aria-hidden': 'true' },
+          collapsed ? 'Expand' : 'Collapse')))
   }
 
   ctx.effect(function () {

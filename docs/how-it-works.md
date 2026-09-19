@@ -138,6 +138,81 @@ title in the station, which left every other song with a column of empty space. 
 counter has a box of its own for the same reason — `9/33` and `10/33` are different widths, and
 everything to their right moved when the number gained a digit.
 
+The artist is cut the same way now. It had no `nowrap` and no overflow at all, so a long one —
+"Jon Håvard Gundersen" is twenty characters into about a hundred and thirty pixels of room —
+wrapped to a second line and laid it over the title inside a row that is 46px tall and does not
+grow. Handing back the rail's 18px would have cleared that particular name by four pixels, and
+broken again the month someone submitted a longer one, so the byline got the same ellipsis the
+title has rather than the card getting wider. CSS rather than the title's word-boundary cut
+because the artist's room genuinely varies: the `E` badge comes and goes, and the counter
+changes width, and an ellipsis tracks that live where a fixed character budget cannot.
+
+The artwork is a plate, not a control. It used to play and pause on click, which the transport
+directly beneath it also does; now it only shows the mark, drags the card like any other part
+of it, and shows the card's own hover tooltip. As a plain element rather than a button it takes
+`cursor: move` instead of `cursor: pointer`, which is the honest thing to show on something
+whose only job is to be dragged.
+
+### Shutting it
+
+A rail down the card's right edge folds it to the width of its own mark: the Omarchy picture,
+and one play button under it, nothing else said. The rail is the full height of the card, so
+the press can be made from either end, and it drags the card like any other part of it — the
+toggle fires only if the hand did not travel.
+
+The fold animates on `width` and `opacity` alone. The card is `position: fixed`, so nothing
+outside its own subtree relayouts, and the body inside it keeps its expanded width and is
+*clipped* rather than reflowed: the collapse uncovers and covers the same layout, so a title
+never re-wraps mid-slide. The one thing that could not ride along is the transport's two outer
+buttons — three flex buttons squeezed into 40px is a crushed glyph for the whole slide — so
+they leave the flow with the first frame and come back only once the card has finished
+widening. Taking them out costs the play button nothing: the middle of three and the whole of
+one share a centre, so it slides instead of jumping.
+
+Which way it was left is remembered in `localStorage`, because the card is a fixture over every
+session rather than something to be met fresh each time. A storage that will not answer is a
+preference for that page only, not a failure.
+
+The chevron is the one glyph on the card that arrives as a file rather than as drawn cells, and
+it is inlined for the same reason the mark is a data URL: the browser half has no asset
+pipeline. Inlining is also what saves its colour — the source SVG carries `stroke="#ffffff"`,
+which would sit invisible on a dark theme, so it is repainted with `currentColor` and follows
+the same token the transport buttons already take.
+
+### Where it left off
+
+The card also remembers the song. One `localStorage` key holds the fold and the playback
+together — `{ collapsed, track: { file, position, duration }, savedAt }` — because the two are
+written at different times by different code, and a write that carried only the fold would
+forget the song, and one that carried only the song would open the card back up on the next
+load. Every write goes through one function that puts both down.
+
+The song is keyed on its **filename, not its index**. The station gains songs, which shifts
+every index onto a different track; a remembered index would drift. A name that is no longer in
+the station is not an error and says nothing — the card is simply at the top of the list.
+
+The **duration is remembered too**, which is the part that is easy to miss. The card's silent
+clock answers zero while `duration` is still zero, so a restored position would draw as `0:00`
+until the real metadata landed a moment later. The remembered length stands in, so the progress
+line and the readout are right on the first paint and get corrected when the truth arrives.
+
+That leaves one trap on the way back in: `loadedmetadata` recomputes the clock from the
+element's own position, and on a fresh element that position is zero — which would wipe the
+restored spot before it was ever drawn. So the spot is *carried* as a `pending` value, spent
+once the track's real length is known, and cleared by anything else that moves the card so it
+can never hijack a later track. Seeking a fresh element is legal because the station answers
+range requests.
+
+It comes back **paused**, in place. Browsers will not start sound without a gesture, and where
+they do allow it — Chrome, for a site it rates highly — they do so inconsistently enough that
+resuming would behave differently for different people. One press picks it up mid-song.
+
+Written on track change, on pause, on seek (debounced, because a drag down the line is a hundred
+positions a second and only the last was asked for), and on `pagehide` — which is the event
+that still fires when the browser puts the page in the back-forward cache, unlike
+`beforeunload`. Plus a five-second heartbeat while the sound is running, so a tab killed
+outright still comes back within five seconds of the mark.
+
 ### When it cannot play
 
 Whatever went wrong is named on the card. Not "the station could not be loaded" — the reason the

@@ -1,6 +1,6 @@
 {
   "name": "omaseek-music",
-  "version": "0.2.2",
+  "version": "0.2.4",
   "description": "Omarchy Radio for DeepSeek Harness: the station card, every song in the playlist, back/play/forward",
   "type": "module",
   "license": "MIT",
