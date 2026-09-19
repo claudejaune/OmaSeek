@@ -411,13 +411,17 @@ function glyphIcon(name) {
 }
 
 /**
- * The rail's glyph: the chevron from `assets/chevron-left.svg` and
- * `assets/chevron-right.svg`, inlined. Inlined rather than loaded because the
+ * The rail's glyph: the chevron in `art/chevron-left.svg` and
+ * `art/chevron-right.svg`, inlined. Inlined rather than loaded because the
  * browser half has no asset pipeline — and because those files carry
  * `stroke="#ffffff"`, which would sit invisible on a dark theme. Painted with
  * `currentColor` instead, it follows the same token the transport buttons
  * already take, so an Omarchy palette and the harness's own dark and light
  * both colour it without this package knowing which is in force.
+ *
+ * The two files are the source of truth for the shape and ship with the
+ * package; these strings are the copy the bundle actually draws. Change one
+ * and change the other.
  */
 var CHEVRON_PATH = { left: 'm15 18-6-6 6-6', right: 'm9 18 6-6-6-6' }
 

@@ -8,13 +8,9 @@ All notable changes to this project will be documented in this file.
 
 #### Added
 
-- The card keeps the spot it was dragged to. It no longer snaps back to the bottom-left corner on every reload — and if the window it comes back into is smaller than the one it left, it is pulled back inside rather than being lost off the edge
-
-### 0.2.4 - 2026-09-19
-
-#### Added
-
+- The card can now be collapsed. A rail down its right edge folds it to the width of the Omarchy mark, with just the play/pause button under it — no title, no artist, no meter, no seek bar. The chevron points left while the card is open and right while it is shut, and says "Collapse" or "Expand" when you hover it
 - The card remembers the song it was on and how far into it. A refresh puts it back in place, paused, ready for one press — and a tab that gets killed outright still comes back within five seconds of the mark
+- The card keeps the spot it was dragged to. It no longer snaps back to the bottom-left corner on every reload — and if the window it comes back into is smaller than the one it left, it is pulled back inside rather than being lost off the edge
 
 #### Changed
 
@@ -23,13 +19,6 @@ All notable changes to this project will be documented in this file.
 #### Fixed
 
 - Long artist names no longer wrap onto a second line over the track name. The artist is now cut with an ellipsis the way the title always was, with the full name in the hover tooltip
-
-### 0.2.3 - 2026-09-19
-
-#### Added
-
-- The card can now be collapsed. A rail down its right edge folds it to the width of the Omarchy mark, with just the play/pause button under it — no title, no artist, no meter, no seek bar. The chevron points left while the card is open and right while it is shut, and says "Collapse" or "Expand" when you hover it
-- The fold is remembered across reloads, so a card you put away stays put
 
 ### 0.2.2 - 2026-09-16
 

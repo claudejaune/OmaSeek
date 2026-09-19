@@ -179,6 +179,12 @@ pipeline. Inlining is also what saves its colour — the source SVG carries `str
 which would sit invisible on a dark theme, so it is repainted with `currentColor` and follows
 the same token the transport buttons already take.
 
+The two SVGs live in `art/`, beside the mark, and ship in the tarball. The path data in
+`CHEVRON_PATH` is the copy the bundle actually draws, so the files are the shape's source and
+the strings are its transcription — change one and change the other. They are not in `assets/`,
+which is where they first went and which the `.gitignore` was swallowing whole: not in git, not
+in the published package, and nothing in the tree saying they had ever been there.
+
 ### Where it left off
 
 The card also remembers the song. One `localStorage` key holds the fold and the playback
