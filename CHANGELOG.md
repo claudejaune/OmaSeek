@@ -8,18 +8,18 @@ All notable changes to this project will be documented in this file.
 
 #### Added
 
-- The card can now be collapsed. A rail down its right edge folds it to the width of the Omarchy mark, with just the play/pause button under it — no title, no artist, no meter, no seek bar. The chevron points left while the card is open and right while it is shut, and says "Collapse" or "Expand" when you hover it
-- The card remembers the song it was on and how far into it. A refresh puts it back in place, paused, ready for one press — and a tab that gets killed outright still comes back within five seconds of the mark
-- The card keeps the spot it was dragged to. It no longer snaps back to the bottom-left corner on every reload — and if the window it comes back into is smaller than the one it left, it is pulled back inside rather than being lost off the edge
+- The music widget is now collapsible
+- Remembers track and progress across page refreshes and harness restarts
+- Remembers widget position across page refreshes and harness restarts
 
 #### Changed
 
-- The artwork is no longer a play/pause button. It was the transport's job already; now it just shows the mark, drags the card, and shows the same hover tooltip as the rest of it
-- The card's outline now uses the same token the shell's own chrome draws with, so it reads as part of the interface rather than as a paler thing floating over it. The lines *inside* the card stayed at their original weight — at the stronger weight they turned it into a grid fighting its own content. Still fully theme-driven, nothing is a literal colour
+- The artwork is no longer a play/pause button. 
+- Widget borders are more prominent color-wise. Same width
 
 #### Fixed
 
-- Long artist names no longer wrap onto a second line over the track name. The artist is now cut with an ellipsis the way the title always was, with the full name in the hover tooltip
+- Long artist names no longer wrap onto a second line over the track name.
 
 ### 0.2.2 - 2026-09-16
 
@@ -31,7 +31,7 @@ All notable changes to this project will be documented in this file.
 
 #### Fixed
 
-- The music card no longer starts with its transport pushed below the bottom edge of the window, and a card that has been dragged stays on screen when the window shrinks
+- The music card no longer starts below the bottom edge of the window
 
 ### 0.2.0 - 2026-09-15
 

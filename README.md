@@ -6,7 +6,7 @@ Three plugins:
 
 1. **Themes**: all 22 Omarchy light/dark themes, rectangular buttons
 2. **Pixel**: The cool pixel animations on [omarchy.org](https://omarchy.org/)
-3. **Music**: Streams **Omarchy Radio** — every song in [the station's playlist](https://radio.omarchy.org), with back/play/forward on the card, and a rail to fold it down to just the mark
+3. **Music**: Streams **Omarchy Radio** — every song in [the station's playlist](https://radio.omarchy.org), with back/play/forward on the card; collapsible
 
 https://github.com/user-attachments/assets/00b55a6a-9f12-4df9-be09-c113dfd9fb79
 
