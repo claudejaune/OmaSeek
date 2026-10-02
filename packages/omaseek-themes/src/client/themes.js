@@ -34,7 +34,7 @@
  */
 
 import React from 'react'
-import { mix } from './color.js'
+import { distinctError, mix } from './color.js'
 import { colors, installed, osScheme, reading, watch, watchOsScheme } from './desktop.js'
 import { paletteFrom } from './desktop-palette.js'
 import { fetchJson, insertSheet } from './dom.js'
@@ -61,7 +61,10 @@ function tokensFor(p) {
   tokens['--dsw-alias-brand-primary'] = p.brand
   tokens['--dsw-alias-label-primary'] = p.text
   tokens['--dsw-alias-label-secondary'] = p.textSecondary
-  tokens['--dsw-alias-state-error-primary'] = p.error
+  // The theme's own error, unless a reader could not tell it from the success
+  // color this token is always shown beside — see `distinctError`. Five of the
+  // 22 ports collapse that way, and a monochrome theme is the likeliest to.
+  tokens['--dsw-alias-state-error-primary'] = distinctError(p.error, p.success)
   tokens['--dsw-alias-state-success-primary'] = p.success
   tokens['--dsw-alias-state-warn-primary'] = p.warn
   tokens['--dsw-specific-sidebar-fill'] = p.bgDeep

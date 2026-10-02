@@ -75,6 +75,7 @@ All notable changes to this project will be documented in this file.
 #### Fixed
 
 - The composer's send and stop button wears the theme again. It paints with the shell's info fill — a fixed DeepSeek blue that no palette can reach — and the rule that used to override it was keyed to a class name a harness update had renamed, which left the button built-in blue whatever theme was picked
+- An error colour that cannot be told apart from its success colour is turned red. Five of the 22 themes collapse that pair — Hackerman's red is `#50f872` against a `#4fe88f` green, thirteen degrees apart — which left every added and removed count, file row, diff marker and prompt-diff line in the same colour. The red keeps the theme's own brightness, so its contrast against the background is unchanged
 
 ### 0.1.2 - 2026-09-15
 

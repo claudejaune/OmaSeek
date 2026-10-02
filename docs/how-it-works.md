@@ -422,6 +422,26 @@ the app background — the formula reproduces the blended column of `themes.md` 
 (Tokyo Night `#2a312e`), and sidebar hover/active states are stepped off the sidebar fill
 itself so they stay visible on themes whose layers share one color.
 
+**A collapsed error/success pair is broken open.** The shell paints added against removed, and
+success against failure, with the one pair `--dsw-alias-state-success-primary` /
+`--dsw-alias-state-error-primary` — in the changed-files card, the presented-files card, the file
+rows inside a tool call, the diff markers and the trajectory's prompt diff. Both come from the
+theme, and a monochrome theme can hand over a "red" that is the same green as its success:
+Hackerman's are `#50f872` and `#4fe88f`, thirteen degrees apart, and **five of the 22** ports
+collapse this way (with White, Lumon, Solitude and Vantablack). Faithful to the theme, and
+useless to a reader.
+
+Where the pair cannot be told apart, `distinctError` in `color.js` turns the error red — the one
+hue no success color in these palettes uses — and then solves its lightness back to the original
+error's *relative luminance*, which keeps the contrast the theme chose against its own background
+and changes nothing but the hue. That solve is why this is not a hue rotation: green is most of a
+color's luminance and red is least, so a red at the same HSL lightness as a green is a much
+darker color on screen. Hackerman and Vantablack cannot hold their brightness at hue 0 — a
+saturated red is simply not as bright as neon green or white — and come out at 5.95:1 and 6.42:1
+rather than 13.92:1 and 8.42:1. The other **17 ports come through untouched**, and because the
+guard lives in `tokensFor` it covers the palettes derived from a community `colors.toml` by the
+same line.
+
 ### Three constraints worth knowing
 
 **Corner radius is not themeable.** Radii are hard-coded per component (user bubble 22px,

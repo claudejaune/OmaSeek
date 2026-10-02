@@ -360,12 +360,17 @@ function paletteWith(overrides) {
 
 const THEMES = {
   themes: [
-    { id: 'catppuccin', name: 'Catppuccin', scheme: 'dark', palette: palette() },
+    // Catppuccin's real success and error, which sit 132 degrees apart: the pair
+    // a reader can already tell apart, and the one that must come through the
+    // palette untouched.
+    { id: 'catppuccin', name: 'Catppuccin', scheme: 'dark', palette: paletteWith({ error: '#f38ba8', success: '#a6e3a1' }) },
     { id: 'catppuccin-latte', name: 'Catppuccin Latte', scheme: 'light', palette: palette() },
     // Tokyo Night's real brand and text, because the send button's guard reads
     // them back: the fill must be the brand, and the hover the brand's step.
     { id: 'tokyo-night', name: 'Tokyo Night', scheme: 'dark', palette: paletteWith({ brand: '#9ece6a', text: '#c0caf5' }) },
-    { id: 'white', name: 'White', scheme: 'light', palette: palette() },
+    // The White theme's real pair: #2a2a2a against #3a3a3a, both near-black and
+    // both neutral, which is the collapsed case in its purest form.
+    { id: 'white', name: 'White', scheme: 'light', palette: paletteWith({ error: '#2a2a2a', success: '#3a3a3a' }) },
   ],
 }
 
@@ -616,7 +621,33 @@ const PACKAGES = [
         applied: 'omarchy-tokyo-night',
         themes: 4,
       },
-      // The composer's send/stop button paints with the shell's *info* fill — a
+      // An error colour a reader cannot tell from the success colour is turned
+      // red. The White theme is the case in its purest form: #2a2a2a against
+      // #3a3a3a, two near-blacks with no hue between them at all. The red is
+      // solved back to the original's brightness (#2a2a2a and #4d1717 have the
+      // same relative luminance), so the theme's contrast survives the change.
+      {
+        label: 'an error that reads as the success colour is turned red',
+        scheme: 'dark',
+        registration: {
+          id: 'omarchy-white',
+          tokens: { '--dsw-alias-state-error-primary': '#4d1717' },
+        },
+        themes: 4,
+      },
+      // And the pair that already works is not touched: Catppuccin's #f38ba8 and
+      // #a6e3a1 are 132 degrees apart, which is the whole point of a guard that
+      // only fires on the five that need it.
+      {
+        label: 'an error that already reads apart keeps the theme colour',
+        scheme: 'dark',
+        registration: {
+          id: 'omarchy-catppuccin',
+          tokens: { '--dsw-alias-state-error-primary': '#f38ba8' },
+        },
+        themes: 4,
+      },
+      // The send/stop button paints with the shell's *info* fill — a
       // static DeepSeek blue that no palette can reach — so the one button a
       // reader presses most was the one button a theme could not colour. Every
       // other primary button in the shell derives from `brand-primary`; this one

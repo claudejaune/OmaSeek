@@ -30,7 +30,7 @@
  * palette rather than a page painted in `#808080`.
  */
 
-import { mix, toRgb } from './color.js'
+import { contrast, mix } from './color.js'
 
 /**
  * How far `surface` sits from `bg` toward `lighter_bg`. Fitted at 0.47 with a
@@ -74,29 +74,6 @@ function first(colors, keys) {
     if (typeof value === 'string' && HEX.test(value.trim())) return value.trim()
   }
   return null
-}
-
-/**
- * WCAG relative luminance, on the same scale `contrast` divides.
- * @param value - a hex color.
- * @returns luminance in 0..1.
- */
-function luminance(value) {
-  var rgb = toRgb(value)
-  var out = 0
-  var weights = [0.2126, 0.7152, 0.0722]
-  for (var i = 0; i < 3; i += 1) {
-    var channel = rgb[i] / 255
-    out += weights[i] * (channel <= 0.03928 ? channel / 12.92 : Math.pow((channel + 0.055) / 1.055, 2.4))
-  }
-  return out
-}
-
-/** WCAG contrast ratio between two hex colors. */
-function contrast(a, b) {
-  var one = luminance(a)
-  var two = luminance(b)
-  return (Math.max(one, two) + 0.05) / (Math.min(one, two) + 0.05)
 }
 
 /**
