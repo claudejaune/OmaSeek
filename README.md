@@ -4,7 +4,7 @@ Use DeepSeek Harness and hate the boring light-dark themes? In love with the Oma
 
 Three plugins:
 
-1. **Themes**: all 22 Omarchy light/dark themes, rectangular buttons
+1. **Themes**: all 22 Omarchy light/dark themes, rectangular buttons. Follows your Omarchy desktop theme if used with the [Omarchy Theme Sync](https://github.com/omacom/omarchy-theme-sync) browser extension
 2. **Pixel**: The cool pixel animations on [omarchy.org](https://omarchy.org/)
 3. **Music**: Streams **Omarchy Radio** — every song in [the station's playlist](https://radio.omarchy.org), with back/play/forward on the card; collapsible
 
@@ -49,6 +49,7 @@ pnpm dsh plugin --profile web add omaseek-themes@latest omaseek-pixel@latest
 ### Settings → OmaThemes
 
 - Appearance (Light / Dark / System), themes (duh), and corner shapes (squircle/square)
+- Follows your Omarchy desktop theme if used with the [Omarchy Theme Sync](https://github.com/omacom/omarchy-theme-sync) browser extension
 
 ### Settings → OmaPixel
 

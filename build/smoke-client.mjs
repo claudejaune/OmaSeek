@@ -61,6 +61,16 @@ function fakeElement() {
   return element
 }
 
+/**
+ * Document listeners, so a case can fire the Omarchy Theme Sync extension's own
+ * `omarchythemechange` the way its content script does. A case resets them, so
+ * one case's subscription never answers another case's event.
+ */
+const documentListeners = new Map()
+function fireDocument(type) {
+  for (const listener of [...(documentListeners.get(type) || [])]) listener()
+}
+
 const head = fakeElement()
 const body = fakeElement()
 const documentStub = {
@@ -70,8 +80,15 @@ const documentStub = {
   createElement: fakeElement,
   querySelector() { return null },
   querySelectorAll() { return [] },
-  addEventListener() {},
-  removeEventListener() {},
+  addEventListener(type, listener) {
+    if (!documentListeners.has(type)) documentListeners.set(type, [])
+    documentListeners.get(type).push(listener)
+  },
+  removeEventListener(type, listener) {
+    const list = documentListeners.get(type) || []
+    const at = list.indexOf(listener)
+    if (at >= 0) list.splice(at, 1)
+  },
   fonts: undefined,
 }
 
@@ -98,6 +115,27 @@ const React = {
 /** Backing store for the localStorage stub; reset per case. */
 const store = new Map()
 
+/**
+ * The browser's colour scheme, as a case can flip it. `prefers-color-scheme` is
+ * the only query whose answer this suite cares about; everything else — the
+ * hero's reduced-motion and pointer queries — stays on the inert answer it had
+ * before, because a real query's `matches` is whatever the engine says.
+ */
+const darkQuery = {
+  media: '(prefers-color-scheme: dark)',
+  matches: false,
+  listeners: [],
+  addEventListener(type, listener) { if (type === 'change') this.listeners.push(listener) },
+  removeEventListener(type, listener) {
+    const at = this.listeners.indexOf(listener)
+    if (at >= 0) this.listeners.splice(at, 1)
+  },
+}
+function setOsDark(next) {
+  darkQuery.matches = next
+  for (const listener of [...darkQuery.listeners]) listener({ matches: next })
+}
+
 // The loader facade lives on `window`, and module bodies reach the rest of the
 // page through that same object — so the stubs and the facade are one value,
 // and `window` inside the bundle is that value rather than a bare object.
@@ -105,7 +143,9 @@ let loaded = null
 const windowStub = {
   __ModuleLoader__: { load(definition) { loaded = definition } },
   document: documentStub,
-  matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }),
+  matchMedia: (query) => (query === '(prefers-color-scheme: dark)'
+    ? darkQuery
+    : { matches: false, addEventListener() {}, removeEventListener() {} }),
   devicePixelRatio: 1,
   innerWidth: 1440,
   innerHeight: 900,
@@ -122,6 +162,105 @@ const windowStub = {
     setItem: (key, value) => { store.set(key, String(value)) },
     removeItem: (key) => { store.delete(key) },
   },
+}
+
+/**
+ * The `colors.toml` map the extension reports, as `colors()` hands it over. It
+ * is the page's own state rather than the API's, because the extension re-reads
+ * `<html>` on every call the way its page API does — a stub that captured the
+ * palette at construction could not model a desktop switching underneath a live
+ * page, which is the case the derivation exists for.
+ */
+let desktopColors = null
+
+/**
+ * `window.omarchy`, as the extension's own page API defines it: theme and mode
+ * are read straight off `<html>`, which is the contract the extension documents
+ * for every page it runs on. The plugin asks this object only whether the
+ * extension is there at all, so a stub that lied about the attributes would be
+ * a different extension than the one being followed.
+ */
+function makeOmarchyApi() {
+  return {
+    get theme() { return documentStub.documentElement.dataset.omarchyTheme || null },
+    get mode() { return documentStub.documentElement.dataset.omarchyMode || null },
+    colors: () => (desktopColors === null ? {} : desktopColors),
+    onChange(handler) {
+      documentStub.addEventListener('omarchythemechange', handler)
+      return () => documentStub.removeEventListener('omarchythemechange', handler)
+    },
+  }
+}
+
+/** What the extension's content script writes: the two `<html>` attributes. */
+function setDesktop(desktop) {
+  if (desktop.theme !== undefined) documentStub.documentElement.dataset.omarchyTheme = desktop.theme
+  if (desktop.mode !== undefined) documentStub.documentElement.dataset.omarchyMode = desktop.mode
+}
+
+/**
+ * Two real `colors.toml` maps, lifted from the extension's own demo corpus
+ * (`demo/themes.json`, whose 46 keys are the ones a desktop theme carries), one
+ * per tone. They are here rather than invented for one reason: the derivation's
+ * constants were fitted against Omarchy's 22 hand-tuned ports, so checking them
+ * against colors a real theme actually uses is the closest thing to a desktop
+ * this suite can have — the extension's native host, and `omarchy-theme-set`
+ * with it, only exists on Omarchy.
+ */
+const DARK_COLORS = {
+  accent: '#8275b7', background: '#06032b', bg: '#06032b', blue: '#8275b7',
+  bright_blue: '#9787d9', bright_cyan: '#cde8ff', bright_fg: '#efebf9',
+  bright_green: '#a1dbff', bright_magenta: '#dca7ff', bright_red: '#cd93d3',
+  bright_yellow: '#ffc5ff', brown: '#715a74', color0: '#06032b', color1: '#b183b6',
+  color10: '#a1dbff', color11: '#ffc5ff', color12: '#9787d9', color13: '#dca7ff',
+  color14: '#cde8ff', color15: '#f7f3fe', color2: '#98c4ff', color3: '#ffceff',
+  color4: '#8275b7', color5: '#c097e7', color6: '#bdd3ff', color7: '#eae4f7',
+  color8: '#616369', color9: '#cd93d3', cursor: '#eae4f7', cyan: '#bdd3ff',
+  dark_bg: '#050220', dark_fg: '#b0abb9', darker_bg: '#030216', fg: '#eae4f7',
+  foreground: '#eae4f7', green: '#98c4ff', light_fg: '#ede8f8', lighter_bg: '#1f1c40',
+  magenta: '#c097e7', muted: '#616369', orange: '#bd96c1', red: '#b183b6',
+  selection: '#eae4f7', selection_background: '#eae4f7', selection_foreground: '#06032b',
+  yellow: '#ffceff',
+}
+
+const LIGHT_COLORS = {
+  accent: '#0073a1', background: '#faedf5', bg: '#faedf5', blue: '#5f6d84',
+  bright_blue: '#425066', bright_cyan: '#005681', bright_fg: '#5b5f68',
+  bright_green: '#41543a', bright_magenta: '#5c4b57', bright_red: '#574d50',
+  bright_yellow: '#5a4c44', brown: '#443b35', color0: '#f4e7ef', color1: '#746a6d',
+  color10: '#41543a', color11: '#5a4c44', color12: '#425066', color13: '#5c4b57',
+  color14: '#005681', color15: '#353942', color2: '#5e7156', color3: '#786960',
+  color4: '#5f6d84', color5: '#7a6874', color6: '#0073a1', color7: '#5b5f68',
+  color8: '#8a8a8a', color9: '#574d50', cursor: '#434750', cyan: '#0073a1',
+  dark_bg: '#f1e4ec', dark_fg: '#22262e', darker_bg: '#e9dce4', fg: '#434750',
+  foreground: '#434750', green: '#5e7156', light_fg: '#4f535c', lighter_bg: '#fffcff',
+  magenta: '#7a6874', muted: '#7e7d82', orange: '#766967', red: '#746a6d',
+  selection: '#0073a1', selection_background: '#0073a1', selection_foreground: '#434750',
+  yellow: '#786960',
+}
+
+/**
+ * The palette `paletteFrom` must build out of `DARK_COLORS`, worked out by hand
+ * from the same relations the module documents — the anchor slots straight off
+ * the theme's keys, the rest at the fitted ratios. Written out rather than
+ * recomputed here, or the test would only prove the module agrees with itself.
+ */
+const DARK_DERIVED = {
+  '--dsw-alias-bg-base': '#06032b',
+  '--dsw-alias-bg-layer-1': '#050220',
+  '--dsw-alias-bg-layer-2': '#1f1c40',
+  '--dsw-alias-bg-overlay': '#120f35',
+  '--dsw-alias-border-l1': '#1b173d',
+  '--dsw-alias-border-l2': '#4d496a',
+  '--dsw-alias-brand-primary': '#8275b7',
+  '--dsw-alias-label-primary': '#eae4f7',
+  '--dsw-alias-label-secondary': '#c6c0d6',
+  '--dsw-alias-label-tertiary': '#9c98b2',
+  '--dsw-specific-brand-ink': '#0c0e10',
+  '--dsw-specific-input-major': '#030216',
+  '--dsw-alias-state-error-primary': '#b183b6',
+  '--dsw-alias-state-success-primary': '#98c4ff',
+  '--dsw-alias-state-warn-primary': '#ffceff',
 }
 
 /** What the stubbed media element does when asked to play. */
@@ -209,11 +348,23 @@ function palette() {
   return out
 }
 
+/**
+ * That placeholder palette with a few slots spelled for real. Only the theme
+ * that has to prove a token *follows the palette* needs one: against fifteen
+ * copies of `#123456` a token hard-wired to the placeholder and a token derived
+ * from the brand are the same color, so the assertion would hold either way.
+ */
+function paletteWith(overrides) {
+  return Object.assign(palette(), overrides)
+}
+
 const THEMES = {
   themes: [
     { id: 'catppuccin', name: 'Catppuccin', scheme: 'dark', palette: palette() },
     { id: 'catppuccin-latte', name: 'Catppuccin Latte', scheme: 'light', palette: palette() },
-    { id: 'tokyo-night', name: 'Tokyo Night', scheme: 'dark', palette: palette() },
+    // Tokyo Night's real brand and text, because the send button's guard reads
+    // them back: the fill must be the brand, and the hover the brand's step.
+    { id: 'tokyo-night', name: 'Tokyo Night', scheme: 'dark', palette: paletteWith({ brand: '#9ece6a', text: '#c0caf5' }) },
     { id: 'white', name: 'White', scheme: 'light', palette: palette() },
   ],
 }
@@ -292,6 +443,224 @@ const PACKAGES = [
         label: 'a settings write resets the scheme, and the palette comes back',
         scheme: 'dark', stored: { dark: 'omarchy-tokyo-night' }, applied: 'omarchy-tokyo-night',
         settingsWrite: true, themes: 4,
+      },
+      // System with the Omarchy Theme Sync extension installed and reporting:
+      // the scheme comes from the desktop's own colors.toml, and the palette is
+      // this package's port of the theme Omarchy names with that slug. The chip
+      // is renamed with it: "System" would name a browser this palette did not
+      // come from, and its tooltip is what says so on hover.
+      {
+        label: 'System follows the desktop theme',
+        scheme: 'system', extension: true, desktop: { theme: 'tokyo-night', mode: 'dark' },
+        applied: 'omarchy-tokyo-night',
+        chips: { Omarchy: true, Dark: false, Light: false },
+        chipTitles: { Omarchy: 'Automatically change based on current Omarchy theme' },
+        absentChips: ['System'],
+        themes: 4,
+      },
+      // The label is the extension's, and only the extension's: a page without
+      // Omarchy Theme Sync keeps the word System, and grows no tooltip with it.
+      {
+        label: 'without the extension the chip stays System, and carries no tooltip',
+        scheme: 'system', applied: 'omarchy-catppuccin-latte',
+        chips: { System: true, Light: false, Dark: false },
+        chipTitles: { System: null },
+        absentChips: ['Omarchy'],
+        themes: 4,
+      },
+      // The desktop is on something this package has never heard of — a
+      // community theme. Its light/dark is still followed; the palette is the
+      // scheme's automatic one.
+      {
+        label: 'System follows the desktop mode when the theme is not one of ours',
+        scheme: 'system', extension: true, desktop: { theme: 'someone-elses-theme', mode: 'dark' },
+        applied: 'omarchy-catppuccin',
+        themes: 4,
+      },
+      // A theme switch on the desktop arrives as a push from the extension's
+      // native host, with no reload on this side. The mode moves with it.
+      {
+        label: 'a desktop switch repaints without a reload',
+        scheme: 'system', extension: true, desktop: { theme: 'tokyo-night', mode: 'dark' },
+        desktopAfter: { theme: 'catppuccin-latte', mode: 'light' },
+        appliedLast: 'omarchy-catppuccin-latte',
+        themes: 4,
+      },
+      // Light and Dark are the opt-out: the desktop is still reported, and is
+      // not followed, because the reader asked for this scheme. The chip keeps
+      // the extension's name either way — the extension is installed regardless.
+      {
+        label: 'a forced scheme ignores the desktop',
+        scheme: 'dark', extension: true, desktop: { theme: 'catppuccin-latte', mode: 'light' },
+        appliedLast: 'omarchy-catppuccin',
+        chips: { Dark: true, Omarchy: false },
+        themes: 4,
+      },
+      // The one the reader complained about, in the shape they complained
+      // about: following the desktop, press a palette, and the chips have to
+      // move with the press. A card is a choice of scheme as well as of colour
+      // — the desktop does not drive a palette that was picked by hand, so
+      // leaving the follow chip lit would claim it still did.
+      {
+        label: 'a card pressed while following moves the scheme off the follow chip',
+        scheme: 'system', extension: true, desktop: { theme: 'tokyo-night', mode: 'dark' },
+        pressCard: 'Catppuccin',
+        appliedLast: 'omarchy-catppuccin',
+        chips: { Dark: true, Omarchy: false },
+        themes: 4,
+      },
+      // Pressing the card that is already in force — while following, that is
+      // the desktop's own theme — is not a choice and must not quietly stop the
+      // following: the way pressing the current item anywhere else does nothing.
+      {
+        label: 'pressing the desktop theme itself keeps following it',
+        scheme: 'system', extension: true, desktop: { theme: 'tokyo-night', mode: 'dark' },
+        pressCard: 'Tokyo Night',
+        appliedLast: 'omarchy-tokyo-night',
+        chips: { Omarchy: true, Dark: false },
+        themes: 4,
+      },
+      // And the press is durable, not just this page: the harness's own
+      // settings take light/dark/system, so what is written there is Dark.
+      // A reload then comes back on Dark with the pick still in force.
+      {
+        label: 'the scheme a card press chose is the one remembered',
+        scheme: 'dark', stored: { dark: 'omarchy-catppuccin', mode: 'dark' },
+        extension: true, desktop: { theme: 'tokyo-night', mode: 'dark' },
+        appliedLast: 'omarchy-catppuccin',
+        chips: { Dark: true, Omarchy: false },
+        themes: 4,
+      },
+      // A slot picked back when a card press left System lit is a scheme
+      // statement too, and a reload is where that is mended: the chips come
+      // back on the scheme the pick belongs to. (Written by the first cut of
+      // following the desktop, which shipped nowhere.)
+      {
+        label: 'a pick stored under System comes back on its own scheme',
+        scheme: 'system', stored: { dark: 'omarchy-tokyo-night', mode: 'system' },
+        extension: true, desktop: { theme: 'nord', mode: 'dark' },
+        appliedLast: 'omarchy-tokyo-night',
+        chips: { Dark: true, Omarchy: false },
+        themes: 4,
+      },
+      // Installed but silent — a native host that is down. The first paint is
+      // held for the grace window and then falls back to the OS scheme, rather
+      // than waiting forever on a palette that is not coming. There is no theme
+      // name to follow and no palette to derive from, so the count line is the
+      // only place that can say the extension has not answered.
+      {
+        label: 'an extension that reports nothing falls back to the OS scheme',
+        scheme: 'system', extension: true, grace: true,
+        applied: 'omarchy-catppuccin-latte',
+        expectSectionText: 'Omarchy Theme Sync has not reported a theme',
+        themes: 4,
+      },
+      // The OS scheme flipping while System follows nothing else: the harness
+      // stops watching it itself once a palette is pinned, so this Plugin has
+      // to, or System would only follow the OS on the next reload.
+      {
+        label: 'System with no desktop follows an OS scheme flip live',
+        scheme: 'system', osFlip: true,
+        applied: 'omarchy-catppuccin-latte', appliedLast: 'omarchy-catppuccin',
+        themes: 4,
+      },
+      // A community theme: installed on the desktop, no port here, and its own
+      // colors.toml carried on the page. The harness wears the desktop's own
+      // palette rather than falling back to Catppuccin, and the section has
+      // nothing to explain because nothing is wrong.
+      {
+        label: 'a desktop theme with no port is painted from its own colors',
+        scheme: 'system', extension: true,
+        desktop: { theme: 'someone-elses-theme', mode: 'dark' },
+        colors: DARK_COLORS,
+        applied: 'omaseek-desktop-someone-elses-theme-dark',
+        registration: {
+          id: 'omaseek-desktop-someone-elses-theme-dark',
+          scheme: 'dark',
+          tokens: DARK_DERIVED,
+        },
+        themes: 5,
+      },
+      // The same desktop theme on a page that came up in the light: the colors
+      // are the theme's, and the mode is the desktop's, so the derived theme
+      // declares the scheme it was read under.
+      {
+        label: 'a light community theme is derived under its own scheme',
+        scheme: 'system', extension: true,
+        desktop: { theme: 'moonlit-castle', mode: 'light' },
+        colors: LIGHT_COLORS,
+        applied: 'omaseek-desktop-moonlit-castle-light',
+        registration: {
+          id: 'omaseek-desktop-moonlit-castle-light',
+          scheme: 'light',
+          tokens: {
+            '--dsw-alias-bg-base': '#faedf5',
+            '--dsw-alias-bg-layer-1': '#f1e4ec',
+            '--dsw-alias-bg-layer-2': '#fffcff',
+            '--dsw-alias-brand-primary': '#0073a1',
+            '--dsw-alias-label-primary': '#434750',
+            '--dsw-alias-state-error-primary': '#746a6d',
+          },
+        },
+        themes: 5,
+      },
+      // A port beats a derivation wherever one exists: the hand-tuned 22 are a
+      // judgement about the theme that reading its colors back cannot reproduce.
+      // Tokyo Night is ported, so its own port is what is painted, and no
+      // second theme is registered for it.
+      {
+        label: 'a ported desktop theme still uses its port, not its colors',
+        scheme: 'system', extension: true,
+        desktop: { theme: 'tokyo-night', mode: 'dark' },
+        colors: DARK_COLORS,
+        applied: 'omarchy-tokyo-night',
+        themes: 4,
+      },
+      // The composer's send/stop button paints with the shell's *info* fill — a
+      // static DeepSeek blue that no palette can reach — so the one button a
+      // reader presses most was the one button a theme could not colour. Every
+      // other primary button in the shell derives from `brand-primary`; this one
+      // had to be given the brand explicitly. Asserted as tokens rather than as a
+      // class-qualified rule, because that is exactly what regressed: the rule
+      // this replaced matched a CSS-module hash that a harness rebuild renamed,
+      // and the button silently went back to blue.
+      {
+        label: 'the send button wears the brand, not the shell blue',
+        scheme: 'dark',
+        registration: {
+          id: 'omarchy-tokyo-night',
+          tokens: {
+            '--dsw-alias-button-info-fill': '#9ece6a',
+            '--dsw-alias-button-info-hover': '#a3cd7d',
+          },
+        },
+        themes: 4,
+      },
+      // The one case left that cannot be painted: a desktop theme with no port
+      // whose colors never arrived — a native host that never answered. The
+      // automatic pair stands in, and the count line says why rather than
+      // letting the picker look like it ignored the desktop.
+      {
+        label: 'a desktop theme whose colors will not read says so',
+        scheme: 'system', extension: true,
+        desktop: { theme: 'ghost-theme', mode: 'dark' },
+        applied: 'omarchy-catppuccin',
+        expectSectionText: 'the desktop theme "ghost-theme" reported no colors',
+        themes: 4,
+      },
+      // And a desktop switch rewrites none of it: the new theme is derived and
+      // registered, the old registration is left alone rather than disposed,
+      // and the palette moves without a reload. Two registrations, because the
+      // switch is a second theme and not an edit of the first.
+      {
+        label: 'an unported desktop switch derives the next theme live',
+        scheme: 'system', extension: true,
+        desktop: { theme: 'someone-elses-theme', mode: 'dark' },
+        desktopAfter: { theme: 'another-theme', mode: 'dark' },
+        colors: DARK_COLORS,
+        applied: 'omaseek-desktop-someone-elses-theme-dark',
+        appliedLast: 'omaseek-desktop-another-theme-dark',
+        themes: 6,
       },
     ],
   },
@@ -481,10 +850,14 @@ function makeServices() {
   // could never see it.
   const listeners = []
   const schemeOf = new Map()
-  let preference = 'system'
+  // Undefined until something writes a preference, so the case's own scheme is
+  // what the Service reports: that is the durable preference `adopt()` puts
+  // there, and the stub has to model it or a Plugin reading the preference
+  // instead of the resolved palette would see a harness nobody runs.
+  let preference
   let activeId = 'dark'
   const snapshot = () => ({
-    preference,
+    preference: preference === undefined ? calls.scheme : preference,
     active: { id: activeId, colorScheme: schemeOf.get(activeId) || calls.scheme },
     themes: [],
   })
@@ -498,9 +871,23 @@ function makeServices() {
 
   const themeService = {
     register(definition) {
+      // The real Service throws on a duplicate id, and the derived desktop
+      // themes are registered exactly once each for that reason — a cache that
+      // forgot would fail here rather than quietly shadowing a registration.
+      if (schemeOf.has(definition.id)) {
+        throw new Error(`theme "${definition.id}" is already registered`)
+      }
       calls.themeRegistrations.push(definition)
       schemeOf.set(definition.id, definition.colorScheme)
-      return () => { schemeOf.delete(definition.id) }
+      return () => {
+        // Disposing the theme backing the active preference resets it to the
+        // default. That is why a desktop switch registers a new theme and
+        // leaves the old one registered; modelled so the hazard is visible if
+        // anything ever starts disposing them.
+        schemeOf.delete(definition.id)
+        if (activeId === definition.id) activeId = 'dark'
+        if (preference === definition.id) preference = undefined
+      }
     },
     getTheme() { return snapshot() },
     setTheme(id) {
@@ -573,6 +960,24 @@ function makeServices() {
 
 function jsonResponse(value) {
   return { ok: true, status: 200, async json() { return value } }
+}
+
+/** Whether a rendered subtree contains this exact string. */
+function hasText(node, text) {
+  if (node === null || node === undefined || typeof node === 'boolean') return false
+  if (typeof node === 'string' || typeof node === 'number') return String(node) === text
+  if (Array.isArray(node)) return node.some((child) => hasText(child, text))
+  if (typeof node.type === 'function') return hasText(node.type(node.props), text)
+  if (node.children.some((child) => hasText(child, text))) return true
+  const nested = node.props === undefined ? undefined : node.props.children
+  return nested === undefined ? false : hasText(nested, text)
+}
+
+/** One of the settings page's chips, found by the word on it. */
+function chipSaying(nodes, label) {
+  return nodes.find((node) => typeof node.props.className === 'string'
+    && node.props.className.split(' ').includes('omaseek-chip')
+    && hasText(node, label))
 }
 
 /**
@@ -656,14 +1061,44 @@ function textsOf(component) {
   return out
 }
 
+/**
+ * Whether a theme id is one this Package registered — a port of one of the 22,
+ * or a palette derived from the desktop's own colors. The distinction matters
+ * because `setTheme()` is also called with the harness's own `light`/`dark`/
+ * `system`, and those are not palettes this Package painted.
+ */
+const isOurs = (id) => id.startsWith('omarchy-') || id.startsWith('omaseek-desktop-')
+
 async function runCase(pkg, testCase) {
   const { calls, ctx, adoptDurable, observeLast } = makeServices()
   calls.scheme = testCase.scheme === undefined ? 'dark' : testCase.scheme
   lastAudio = null
   store.clear()
+  // The page as this case finds it: no listeners from the last one, no desktop
+  // reported, and the extension present only where a case says so.
+  documentListeners.clear()
+  darkQuery.matches = false
+  darkQuery.listeners.length = 0
+  delete windowStub.omarchy
+  delete documentStub.documentElement.dataset.omarchyTheme
+  delete documentStub.documentElement.dataset.omarchyMode
+  // No colors until a case supplies them: an extension that is installed but
+  // has reported nothing is the state a page boots into, and the one the
+  // derivation has to survive.
+  desktopColors = null
+  if (testCase.extension === true) windowStub.omarchy = makeOmarchyApi()
+  if (testCase.desktop !== undefined) setDesktop(testCase.desktop)
+  if (testCase.colors !== undefined) desktopColors = testCase.colors
+  if (testCase.osDark === true) darkQuery.matches = true
+
+  // What the picker remembered: one slot per scheme, and the mirrored
+  // preference. Assembled as one object, because each of these writes the same
+  // key and a second `set` would erase the first.
+  const choices = {}
   for (const [scheme, id] of Object.entries(testCase.stored === undefined ? {} : testCase.stored)) {
-    store.set('omaseek.themes', JSON.stringify({ [scheme]: id }))
+    choices[scheme] = id
   }
+  if (Object.keys(choices).length > 0) store.set('omaseek.themes', JSON.stringify(choices))
   // OmaPixel's two switches, as a reader left them before this page load.
   if (testCase.pixel !== undefined) store.set('omaseek.pixel', JSON.stringify(testCase.pixel))
   // What the last page left in `omaseek.music`: the fold, the song, and the
@@ -717,6 +1152,51 @@ async function runCase(pkg, testCase) {
 
   await new Promise((done) => setTimeout(done, 20))
 
+  // A desktop that reports after the page is up. The extension answers a fresh
+  // page from its own cache, but the palette can still land after this Plugin
+  // has resolved its scheme — and the swap has to arrive without a reload.
+  if (testCase.desktopAfter !== undefined) {
+    setDesktop(testCase.desktopAfter)
+    fireDocument('omarchythemechange')
+    await new Promise((done) => setTimeout(done, 25))
+  }
+
+  // An extension that is installed and has reported nothing yet: the first
+  // paint is held briefly rather than the OS scheme being shown and repainted
+  // over, and the fallback has to arrive once the hold runs out. The hold is
+  // the point, so nothing may have been applied while it lasts.
+  if (testCase.grace === true) {
+    const early = calls.themeSet.filter(isOurs)
+    if (early.length > 0) problems.push(`painted ${early.join(', ')} while holding for the desktop`)
+    await new Promise((done) => setTimeout(done, 600))
+  }
+
+  // The OS scheme flipping, which is what System follows when the desktop says
+  // nothing: the harness itself stops listening once a palette is pinned, so
+  // this Plugin has to or System would only follow the OS on the next reload.
+  if (testCase.osFlip === true) {
+    setOsDark(true)
+    await new Promise((done) => setTimeout(done, 25))
+  }
+
+  // A press on one of the section's own theme cards, which is the interaction
+  // that decides a scheme: the palette is the reader's, and so is the chip.
+  if (testCase.pressCard !== undefined) {
+    const section = calls.registered.find((entry) => entry.options.name === 'settings.section')
+    const cards = section === undefined ? [] : nodesOf(React.createElement(section.component, {}))
+    const card = cards.find((node) => typeof node.props.className === 'string'
+      && node.props.className.split(' ').includes('omaseek-card') && hasText(node, testCase.pressCard))
+    if (card === undefined) problems.push(`no "${testCase.pressCard}" card on the settings page`)
+    else {
+      try {
+        card.props.onClick()
+      } catch (error) {
+        problems.push(`pressing "${testCase.pressCard}" threw: ${error.message}`)
+      }
+    }
+    await new Promise((done) => setTimeout(done, 10))
+  }
+
   const wanted = pkg.expect
   const expectedThemes = testCase.themes === undefined ? wanted.themes : testCase.themes
   if (expectedThemes !== undefined && calls.themeRegistrations.length !== expectedThemes) {
@@ -738,11 +1218,21 @@ async function runCase(pkg, testCase) {
   if (calls.disposers.length === 0) problems.push('no owned effects were registered')
 
   if (testCase.applied !== undefined) {
-    const applied = calls.themeSet.filter((id) => id.startsWith('omarchy-'))
+    const applied = calls.themeSet.filter(isOurs)
     if (testCase.applied === null) {
       if (applied.length > 0) problems.push(`applied ${applied.join(', ')} where none was expected`)
     } else if (!applied.includes(testCase.applied)) {
       problems.push(`applied ${applied.length === 0 ? 'nothing' : applied.join(', ')}; expected ${testCase.applied}`)
+    }
+  }
+
+  // What is in force at the end, which is the half a sequence of palette
+  // switches can get wrong while every id in it was applied along the way.
+  if (testCase.appliedLast !== undefined) {
+    const applied = calls.themeSet.filter(isOurs)
+    const last = applied[applied.length - 1]
+    if (last !== testCase.appliedLast) {
+      problems.push(`left "${last}" in force, expected "${testCase.appliedLast}"`)
     }
   }
 
@@ -762,6 +1252,74 @@ async function runCase(pkg, testCase) {
   }
 
   const { rendered, nodes } = renderAll(calls, problems)
+
+  // A theme a case expects this Package to have registered, checked through the
+  // definition the harness actually received — so a mapping is verified end to
+  // end, and a module that built the right palette but handed over the wrong
+  // tokens cannot pass by agreeing with itself.
+  if (testCase.registration !== undefined) {
+    const definition = calls.themeRegistrations.find((one) => one.id === testCase.registration.id)
+    if (definition === undefined) {
+      problems.push(`no theme "${testCase.registration.id}" was registered`
+        + ` — got ${JSON.stringify(calls.themeRegistrations.map((one) => one.id))}`)
+    } else {
+      if (testCase.registration.scheme !== undefined
+        && definition.colorScheme !== testCase.registration.scheme) {
+        problems.push(`theme declares ${definition.colorScheme}, expected ${testCase.registration.scheme}`)
+      }
+      for (const [token, value] of Object.entries(testCase.registration.tokens === undefined ? {} : testCase.registration.tokens)) {
+        if (definition.tokens[token] !== value) {
+          problems.push(`the ${token} of ${testCase.registration.id} is ${JSON.stringify(definition.tokens[token])},`
+            + ` expected ${JSON.stringify(value)}`)
+        }
+      }
+    }
+  }
+
+  // What the section says that no control carries. The count line's desktop
+  // note is the only one left, and it is the whole explanation a reader gets
+  // when the desktop's colors could not be read.
+  if (testCase.expectSectionText !== undefined) {
+    const section = calls.registered.find((entry) => entry.options.name === 'settings.section')
+    const said = section === undefined ? [] : textsOf(section.component)
+    if (!said.some((text) => text.includes(testCase.expectSectionText))) {
+      problems.push(`the settings page does not say ${JSON.stringify(testCase.expectSectionText)}`
+        + ` — it says ${JSON.stringify(said.filter((text) => text.length > 30))}`)
+    }
+  }
+
+  // Which scheme chips are lit. A chip left on the follow scheme over a palette
+  // the desktop no longer drives is the lie this asserts against.
+  for (const [label, lit] of Object.entries(testCase.chips === undefined ? {} : testCase.chips)) {
+    const chip = chipSaying(nodes, label)
+    if (chip === undefined) problems.push(`no "${label}" chip on the settings page`)
+    else if ((chip.props['data-on'] === '1') !== lit) {
+      problems.push(`the "${label}" chip is ${chip.props['data-on'] === '1' ? 'lit' : 'dark'},`
+        + ` expected ${lit ? 'lit' : 'dark'}`)
+    }
+  }
+
+  // What a chip says on hover. The follow chip is renamed for the extension, and
+  // its tooltip is the only place left that spells out what the rename means, so
+  // a null here asserts the absence of one rather than skipping the check.
+  for (const [label, tip] of Object.entries(testCase.chipTitles === undefined ? {} : testCase.chipTitles)) {
+    const chip = chipSaying(nodes, label)
+    if (chip === undefined) problems.push(`no "${label}" chip on the settings page`)
+    else {
+      const actual = chip.props.title === undefined ? null : chip.props.title
+      if (actual !== tip) {
+        problems.push(`the "${label}" chip's tooltip is ${JSON.stringify(actual)},`
+          + ` expected ${JSON.stringify(tip)}`)
+      }
+    }
+  }
+
+  // The other half of a rename: the word that is no longer there.
+  for (const label of testCase.absentChips === undefined ? [] : testCase.absentChips) {
+    if (chipSaying(nodes, label) !== undefined) {
+      problems.push(`the settings page still shows a "${label}" chip`)
+    }
+  }
 
   /** The card as it is drawn right now, re-rendered from its own state. */
   const texts = () => {

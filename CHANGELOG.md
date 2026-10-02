@@ -59,6 +59,23 @@ All notable changes to this project will be documented in this file.
 
 ## omaseek-themes
 
+### 0.2.0 - 2026-10-03
+
+#### Added
+
+- With the [Omarchy Theme Sync](https://github.com/omacom/omarchy-theme-sync) extension installed, **System** follows the Omarchy desktop instead of the browser: the scheme comes from the desktop's own `colors.toml` and the palette is this package's port of the theme Omarchy names, matched on its slug
+- With the extension installed the **System** chip is renamed **Omarchy**, with the tooltip "Automatically change based on current Omarchy theme"
+- A desktop theme with no palette here is now painted from its own colors instead of falling back to Catppuccin — community themes included. When the colors cannot be read, the theme list says so
+
+#### Changed
+
+- Pressing a theme card is a choice of scheme as well as of palette: the chips move to **Light** or **Dark**, because a palette chosen by hand is one the desktop no longer drives. Pressing that chip hands every scheme back to the desktop
+- **System** now watches the browser's own light/dark itself, since pinning a palette makes the harness stop listening to it
+
+#### Fixed
+
+- The composer's send and stop button wears the theme again. It paints with the shell's info fill — a fixed DeepSeek blue that no palette can reach — and the rule that used to override it was keyed to a class name a harness update had renamed, which left the button built-in blue whatever theme was picked
+
 ### 0.1.2 - 2026-09-15
 
 #### Fixed

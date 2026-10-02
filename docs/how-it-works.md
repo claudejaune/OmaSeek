@@ -13,16 +13,18 @@ its palette, the active one marked, and the corner shape (squircle or square) fo
 harness.
 
 **It opens on Catppuccin.** With nothing chosen, a light UI gets **Catppuccin Latte** and a
-dark one gets **Catppuccin** — the pair Omarchy itself opens on. The picker follows the
-scheme rather than the click: switching Light ↔ Dark re-applies that scheme's palette, and
-each scheme remembers its own choice, so a light pick is never a statement about what a dark
-UI should wear.
+dark one gets **Catppuccin** — the pair Omarchy itself opens on — and with the Omarchy Theme
+Sync extension installed it opens on the desktop's own theme instead (see **System follows the
+desktop** below). The picker follows the scheme rather than the click: switching Light ↔ Dark
+re-applies that scheme's palette, and each scheme remembers its own choice, so a light pick is
+never a statement about what a dark UI should wear.
 
 **The choice survives a reload**, which the harness alone cannot do: `theme.setTheme()`
 persists only its own `light`/`dark`/`system` preference, so an Omarchy palette would be
 forgotten on every reload. The picker keeps its own note in `localStorage` under
-`omaseek.themes`, one slot per scheme. Clearing site data, or pressing **System**, returns
-both schemes to automatic.
+`omaseek.themes`, one slot per scheme plus the preference it last saw — see **System follows
+the desktop** below for why the preference, too. Clearing site data, or pressing **System**,
+returns both schemes to automatic.
 
 **And it survives a settings write.** Writing *any* settings section — picking a model writes
 the default-model one — republishes the settings mirror, and the harness answers by adopting
@@ -35,14 +37,93 @@ repair again.
 
 **Opting out is a click.** The **Light** and **Dark** chips are the harness's own palettes,
 and choosing one for a scheme also tells the picker to stop painting over it — otherwise the
-automatic Catppuccin would come straight back on the next scheme change.
+automatic Catppuccin, or the desktop, would come straight back on the next scheme change. A
+theme card is a click of the same weight: it is a palette chosen by hand, so the chips move to
+the scheme it belongs to and the desktop stops having a say in it.
+
+**System follows the desktop.** Where the [Omarchy Theme Sync][theme-sync] extension is
+installed, the **System** chip is renamed **Omarchy** — its tooltip reads "Automatically change
+based on current Omarchy theme" — and it stops meaning "whatever the browser says" to mean
+"whatever Omarchy says": the scheme comes from the desktop's own `colors.toml`, and the palette
+is this package's port of the theme Omarchy names, matched on the slug it writes to
+`~/.local/state/omarchy/current/theme.name` (`tokyo-night` → `omarchy-tokyo-night`). A theme
+switched on the desktop arrives as a push from the extension's native host, which watches
+`theme` and `theme.name` under `~/.local/state/omarchy/current`, so the harness repaints with no
+reload on this side. Without the extension the chip keeps the word **System**, carries no
+tooltip, and means exactly what it always did.
+
+**An unported theme is painted from its own colors.** The 22 home-page themes have hand-tuned
+ports here, and a port wins wherever one exists. A community theme from
+`~/.config/omarchy/themes` has none — and used to fall back to Catppuccin in silence, which is
+the desktop saying one thing and the harness wearing another with nothing on screen to explain
+it. The extension carries the whole of that theme's `colors.toml` on the page
+(`window.omarchy.colors()`), so the palette is read rather than guessed: `desktop-palette.js`
+maps those keys onto the fifteen slots `tokensFor` expands, registers the result as one theme of
+this Package's making (`omaseek-desktop-<slug>-<mode>`), and puts it in force. The harness then
+wears the desktop theme itself, live, on the same push that reports the switch.
+
+The mapping takes what it can straight off the theme and derives the rest. Anchors are the
+theme's own keys — `background` → `bg`, `dark_bg` → `bgDeep`, `lighter_bg` → `surface2`,
+`foreground` → `text`, `accent` → `brand`, and red/green/yellow → error/success/warn. Three
+values have no key to read, because Omarchy hand-authors them per theme (§4.1 and §7.2 of the
+research doc) and the extension does not forward them: the two borders, the two dim text steps,
+and the brand ink. Those are derived, and the ratios are **fitted by least squares over RGB
+against all 22 ports at once** rather than chosen by eye:
+
+| Derived slot | Relation | Fit | Mean RGB error | Max |
+|---|---|---|---|---|
+| `surface` | `mix(bg, lighter_bg, 0.47)` | overlay between page and raised layer | 4.0 | 23.8 |
+| `borderSubtle` | `mix(bg, text, 0.09)` | | 13.3 | 37.5 |
+| `borderStrong` | `mix(bg, text, 0.31)` | | 33.0 | 123.5 |
+| `textSecondary` | `mix(text, bg, 0.16)` | | — | — |
+| `textMuted` | `mix(text, bg, 0.34)` | measured median 0.30 | 21.6 | 54.4 |
+
+`brandInk` is the one rule that is a judgement rather than a blend: Omarchy inks a brand fill
+with either `#0c0e10` or white, and the extension does not say which. Picking by better WCAG
+contrast agrees with Omarchy on **21 of 22** ports. The exception is Rosé Pine, where Omarchy
+inks white on `#56949f` (3.4:1) and the derivation picks the near-black (5.7:1) — a derivation
+may therefore differ from Omarchy's taste, but never towards less legible text.
+
+Two states still leave the harness on a palette that is not the desktop's, and the count line of
+the theme list says so rather than letting a picker look broken. With the extension installed and
+never having reported — a native host that is down — there is no theme name to follow, so
+`Omarchy Theme Sync has not reported a theme` appears beside the automatic pair. And a desktop
+theme that is named but whose colors will not read gives
+`the desktop theme "<slug>" reported no colors`. Both are the same instinct as the rest of this
+Plugin: the automatic Catppuccin pair is a fine answer, but it is not an answer to a question
+nobody asked.
+
+The extension is read through the DOM it [documents for every page][theme-sync] it runs on:
+`data-omarchy-mode` and `data-omarchy-theme` on `<html>`, plus its own `omarchythemechange`
+event, with a `MutationObserver` as the belt for anything that writes those attributes without
+it. `window.omarchy` answers two things: whether the extension is there at all, which decides
+whether a palette that has not landed yet is worth waiting briefly for, and — only for a theme
+with no port here — the raw `colors.toml` behind those attributes. Nothing is required of the
+page, and nothing is required of the extension: with none installed, or with one whose native
+host is down, the follow chip resolves to the harness's own `prefers-color-scheme` — which this
+Plugin watches itself, because pinning a palette moves the Service's preference off `system` and
+its own media listener stops firing.
+
+The picker never writes the desktop. The extension restricts `setTheme`/`installTheme` to
+allowlisted origins, and a DeepSeek Harness page is not one of them: the picker follows what the
+desktop reports, and the desktop is changed on the desktop.
+
+A card pressed while following is a choice of scheme as well as of palette: the chips move to
+Light or Dark with it, because a palette chosen by hand is not one the desktop drives any more,
+and a lit **Omarchy** would say otherwise — and the harness's own settings are written to match,
+so a reload comes back on that scheme rather than on the desktop. **Omarchy** forgets both
+slots, which is how following starts again. When the extension is absent the chip is **System**
+once more, and every rule above is exactly what it was before the extension existed.
+
+[theme-sync]: https://github.com/omacom/omarchy-theme-sync
 
 Each theme is registered with the `colorScheme` Omarchy assigns it, so every theme is half
 of a pair — a dark theme has no light variant. The picker therefore reads
 `getTheme().active.colorScheme` and lists only the themes belonging to the scheme now in
 force: the **5 light** palettes (`catppuccin-latte`, `flexoki-light`, `lupine`, `rose-pine`,
 `white`) while the app is light, the **17 dark** ones while it is dark. The Light / Dark /
-System chips switch the scheme — and with it, which set you can pick from.
+System (or **Omarchy**, with the extension) chips switch the scheme — and with it, which set you
+can pick from.
 
 The token pairs in `Theme.listTokens` are *not* this mechanism: a pair is one active theme's
 own light and dark values, not two themes.
@@ -326,27 +407,43 @@ inspect API advertises:
 
 - **The 13 native tokens** (backgrounds, surfaces, borders, brand, text, state colors,
   sidebar fill) — the safe core, listed by `Theme.listTokens`.
-- **17 design-platform tokens outside that set** — `--dsw-specific-bubble`,
-  `--dsw-specific-input-major`, `--dsw-alias-label-tertiary`, `--dsw-alias-link`, the markdown
-  code blocks, menus and sidebar nav states. These need no CSS injection: a registered
-  theme's values are applied the same way as the native ones.
+- **19 design-platform tokens outside that set** — `--dsw-specific-bubble`,
+  `--dsw-specific-input-major`, `--dsw-alias-label-tertiary`, `--dsw-alias-link`, the button
+  fills and their hover, the markdown code blocks, menus and sidebar nav states. These need no
+  CSS injection: a registered theme's values are applied the same way as the native ones.
 
 Because a registered theme declares exactly one scheme, its `tokens` are plain values. The
 `{ light, dark }` pair form belongs to `overrideTokens()` layers only, and this plugin uses no
 layer.
 
-**Derived colors.** Each theme's 15 source values expand to 30 tokens; the extras are blends
+**Derived colors.** Each theme's 15 source values expand to 32 tokens; the extras are blends
 of the source colors (`mix()` in the browser half). The user bubble is brand at 12.15 % over
 the app background — the formula reproduces the blended column of `themes.md` §5.2 exactly
 (Tokyo Night `#2a312e`), and sidebar hover/active states are stepped off the sidebar fill
 itself so they stay visible on themes whose layers share one color.
 
-### Two constraints worth knowing
+### Three constraints worth knowing
 
 **Corner radius is not themeable.** Radii are hard-coded per component (user bubble 22px,
 composer card 22px, send button 999px) and there is no radius token in `design-platform.css`.
 Squaring them off would require targeting build-hashed CSS-module class names, which change on
 every rebuild. The plugin therefore squares only the controls it owns.
+
+**The send button is the one themed control that still needs a class name.**
+`design-platform.css` gives the shell two button fills: `--dsw-alias-button-primary-fill`, which
+derives from `--dsw-alias-brand-primary` and so follows any theme for free, and
+`--dsw-alias-button-info-fill`, a static DeepSeek blue. The composer's send/stop button is the
+only primary button in the shell that paints with the second, and it hard-codes `color: #fff`
+rather than taking its ink from a token. So the plugin colours it in two layers: the **fill** is
+set as a token, which no rebuild can rename away, and the **glyph** — which no token can reach —
+is set by a rule keyed to the composer module's `primary` class.
+
+That second half is the fragile one, and it has already broken once. The `KFmeWW_primary` of
+0.1.2 went dead when a harness update renamed the module to `uV2eYG_primary`, and the button
+spent that release on the shell's blue whatever theme was chosen. The class hash is the only
+handle the DOM offers for an ink override; when it moves, the fill still follows the theme and
+only the glyph drops back to white. The two consumers of the same token that are not buttons —
+an active row icon and a badge — want the accent anyway.
 
 **The assistant reply is not a bubble.** `--dsw-specific-bubble` styles the user (and
 steering) message only — `MessageItem.tsx`'s `UserStyleBubble` documents itself as
@@ -356,7 +453,16 @@ steering) message only — `MessageItem.tsx`'s `UserStyleBubble` documents itsel
 
 **The shell does not persist a picked theme; the picker does.** `setTheme()` only writes the
 built-in `light`/`dark`/`system` preference to settings. OmaThemes therefore remembers its own
-choice per scheme in `localStorage` (`omaseek.themes`) and re-applies it on load.
+choice per scheme in `localStorage` (`omaseek.themes`) and re-applies it on load — and, for the
+same reason, mirrors the preference itself: the moment the picker pins a palette the live
+snapshot's `preference` *is* that palette's id, so the durable `light`/`dark`/`system` the
+reader chose is only visible before the first paint, and is written down when it is.
+
+A visible consequence of that same mechanism, and older than this Plugin: while an Omarchy
+palette is in force, **General → Appearance** shows no chip lit, because the snapshot it reads
+the preference from no longer names one. The OmaThemes chips read the mirrored preference
+instead and stay truthful. Fixing the Appearance row would mean changing `ui-theme`, which no
+Plugin can do.
 
 ## Sources
 
@@ -366,3 +472,8 @@ theme's official project — links for all of them are in the Sources section of
 The hero field and the now-playing card are ports of
 `omarchy.org`'s `HeroPixelField.tsx` and its music card, and the track the card streams lives
 at `radio.omarchy.org`.
+
+The desktop palette and mode are read from the
+[Omarchy Theme Sync](https://github.com/omacom/omarchy-theme-sync) extension, whose native host
+streams `~/.local/state/omarchy/current/{theme,theme.name}` to every page through the two
+`<html>` attributes and the `omarchythemechange` event.
