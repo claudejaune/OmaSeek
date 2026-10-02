@@ -623,15 +623,15 @@ const PACKAGES = [
       },
       // An error colour a reader cannot tell from the success colour is turned
       // red. The White theme is the case in its purest form: #2a2a2a against
-      // #3a3a3a, two near-blacks with no hue between them at all. The red is
-      // solved back to the original's brightness (#2a2a2a and #4d1717 have the
-      // same relative luminance), so the theme's contrast survives the change.
+      // #3a3a3a, two near-blacks with no hue between them at all. Keeping the
+      // error's own brightness would solve to #4d1717, which on white still reads
+      // as black, so the red is lifted to the brightness floor instead.
       {
         label: 'an error that reads as the success colour is turned red',
         scheme: 'dark',
         registration: {
           id: 'omarchy-white',
-          tokens: { '--dsw-alias-state-error-primary': '#4d1717' },
+          tokens: { '--dsw-alias-state-error-primary': '#912c2c' },
         },
         themes: 4,
       },

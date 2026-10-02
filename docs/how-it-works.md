@@ -438,9 +438,16 @@ and changes nothing but the hue. That solve is why this is not a hue rotation: g
 color's luminance and red is least, so a red at the same HSL lightness as a green is a much
 darker color on screen. Hackerman and Vantablack cannot hold their brightness at hue 0 — a
 saturated red is simply not as bright as neon green or white — and come out at 5.95:1 and 6.42:1
-rather than 13.92:1 and 8.42:1. The other **17 ports come through untouched**, and because the
-guard lives in `tokensFor` it covers the palettes derived from a community `colors.toml` by the
-same line.
+rather than 13.92:1 and 8.42:1.
+
+A floor keeps the red from being *too* faithful to a dark theme. White's error is `#2a2a2a`
+against a `#3a3a3a` success, and preserving that brightness solved to `#4d1717` — still black to
+the eye, so both counts of the card read the same. Below a relative luminance of `0.08` the red
+is lifted to it, which costs the theme some of its own contrast (White keeps 8.1:1, down from
+14.5:1) and buys a color a reader can name. Solitude's error sits just above the floor and is
+left exactly as it was. The other **17 ports come through untouched**, and because the guard
+lives in `tokensFor` it covers the palettes derived from a community `colors.toml` by the same
+line.
 
 ### Three constraints worth knowing
 

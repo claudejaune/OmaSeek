@@ -97,6 +97,19 @@ var RED = 0
 var RED_SATURATION = 0.7
 
 /**
+ * How bright the red is allowed to stay dark, as relative luminance.
+ *
+ * Keeping the error's own brightness is the point of the solve, but a theme
+ * whose error is nearly black hands over a red that is nearly black too — the
+ * White theme's `#2a2a2a` became `#4d1717`, and on white both counts of the
+ * changed-files card still read as black. A red has to be bright enough to show
+ * that it is red at all; below this it is lifted to here, which costs some of
+ * the theme's own contrast (White keeps 8.1:1 against its background, down from
+ * 14.5:1) and buys a colour a reader can actually name.
+ */
+var RED_FLOOR = 0.08
+
+/**
  * How much chroma a color needs before its hue says anything. A neutral grey
  * reports the same hue as a pure red — zero saturation makes the number
  * meaningless — which is why this is asked before any hue is compared.
@@ -187,7 +200,7 @@ function distinctError(error, success) {
   if (toHsv(success).saturation >= CHROMATIC && hueGap(RED, success) < DISTINCT_HUE) return error
 
   var saturation = Math.max(toHsv(error).saturation, RED_SATURATION)
-  var target = luminance(error)
+  var target = Math.max(luminance(error), RED_FLOOR)
   var best = error
   var closest = Infinity
   for (var step = 0; step <= RED_STEPS; step += 1) {
