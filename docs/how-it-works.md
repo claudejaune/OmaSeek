@@ -63,20 +63,60 @@ this Package's making (`omaseek-desktop-<slug>-<mode>`), and puts it in force. T
 wears the desktop theme itself, live, on the same push that reports the switch.
 
 The mapping takes what it can straight off the theme and derives the rest. Anchors are the
-theme's own keys — `background` → `bg`, `dark_bg` → `bgDeep`, `lighter_bg` → `surface2`,
-`foreground` → `text`, `accent` → `brand`, and red/green/yellow → error/success/warn. Three
-values have no key to read, because Omarchy hand-authors them per theme (§4.1 and §7.2 of the
-research doc) and the extension does not forward them: the two borders, the two dim text steps,
-and the brand ink. Those are derived, and the ratios are **fitted by least squares over RGB
-against all 22 ports at once** rather than chosen by eye:
+theme's own keys, in Omarchy's own long spelling first and its legacy short alias second —
+`background` → `bg`, `dark_background`/`dark_bg` → `bgDeep`,
+`lighter_background`/`lighter_bg` → `surface2`, `darker_background`/`darker_bg` → `fieldBg`,
+`foreground` → `text`, `accent` → `brand`, and red/green/yellow → error/success/warn. The long
+names are the ones a `colors.toml` actually holds: the short forms are aliases
+`omarchy-theme-color` still accepts, and no theme in Omarchy's own set or in the community
+sample writes them. A palette generated from an `alacritty.toml` — which is what a theme with
+no `colors.toml` gets, and what a large share of community themes ship — names no layer at all
+and is read through the ANSI `color0..15` fallbacks instead.
+
+Five values have no key to read, because Omarchy hand-authors them per theme (§4.1 and §7.2 of
+the research doc) and the extension does not forward them: the two borders, the two dim text
+steps, and the brand ink. Those are derived, and the ratios are **fitted by least squares over
+RGB against all 22 ports at once** rather than chosen by eye:
 
 | Derived slot | Relation | Fit | Mean RGB error | Max |
 |---|---|---|---|---|
-| `surface` | `mix(bg, lighter_bg, 0.47)` | overlay between page and raised layer | 4.0 | 23.8 |
+| `surface` | `mix(bg, lighter_background, 0.47)` | overlay between page and raised layer | 4.0 | 23.8 |
 | `borderSubtle` | `mix(bg, text, 0.09)` | | 13.3 | 37.5 |
 | `borderStrong` | `mix(bg, text, 0.31)` | | 33.0 | 123.5 |
 | `textSecondary` | `mix(text, bg, 0.16)` | | — | — |
 | `textMuted` | `mix(text, bg, 0.34)` | measured median 0.30 | 21.6 | 54.4 |
+
+The two dim text steps are derived rather than read even where a theme states them, which is
+deliberate: Omarchy's `muted` is the colour it paints *inactive and disabled* text with, and
+the harness's tertiary token is caption text — on several of the 22 the theme's own value is
+far too dim to read there (Hackerman's `#2d3450` on `#0b0c16` is 1.9:1). The fitted step keeps
+the relationship every port was built on instead.
+
+A theme that names no layer steps gets them derived from its two anchors, in the direction its
+own background runs, by the median of Omarchy's 22 (`0.264`/`0.471` of the way to black for a
+dark theme's two deeper layers, `0.077` toward the text for its raised one, and
+`0.065`/`0.129`/`0.103` toward the text for a light theme's three) — so a generated palette
+still has a sidebar, an overlay and an input field rather than five copies of the page colour.
+
+**The scheme is Omarchy's answer, not the extension's default.** The extension reports the
+`mode` a theme declares, and answers `dark` for a theme that declares none — which is two
+thirds of the community themes sampled, and every generated palette, because
+`omarchy-theme-color` writes no mode line. Omarchy's own resolver falls through a legacy
+`theme_type` key and then the background's channel sum (above 382 is light), and that is what
+this follows: `theme_type` where the theme has one, then its background, then the extension's
+answer as the last resort. The `light.mode` marker file beside a legacy `colors.toml` is the
+one step of Omarchy's cascade the extension does not forward — and a light palette says the
+same thing through its background, which is why that step is not missed in practice.
+
+**A port is worn only while it still agrees.** Omarchy's own guide calls a user theme
+directory with the same slug the preferred way to *tweak* a stock theme — the stock files are
+copied first and the user's win on top. The slug then still names one of the 22 ports while the
+desktop wears colours the port has never seen. So the port is used only while its page colour
+(`--dsw-alias-bg-base`) still equals the `background` the desktop reports — which it does for
+all 22 untouched stock themes — and an overlaid one is painted from its own colors like any
+community theme. The rest of a port is this package's reading of the theme's *look*, which the
+home page and the desktop differ on for 7 of the 22; comparing those would discard the port for
+themes nobody has touched.
 
 `brandInk` is the one rule that is a judgement rather than a blend: Omarchy inks a brand fill
 with either `#0c0e10` or white, and the extension does not say which. Picking by better WCAG
@@ -114,6 +154,14 @@ and a lit **Omarchy** would say otherwise — and the harness's own settings are
 so a reload comes back on that scheme rather than on the desktop. **Omarchy** forgets both
 slots, which is how following starts again. When the extension is absent the chip is **System**
 once more, and every rule above is exactly what it was before the extension existed.
+
+That last part is the whole platform story. Everything on this side of the seam is optional:
+`desktop.js` reads attributes a browser extension writes and nothing else — no Omarchy binary,
+no file, no environment, no OS — so a page without it, on any Linux, on Windows or on macOS,
+takes none of these branches. `colors()` returns null before it looks at anything, the
+derivation is never reached, the chip keeps the word **System**, and the plugin is the harness's
+own light/dark with the 22 ports on top, exactly as it was before this existed. Nothing here
+needs a fallback for those machines because nothing here is asked of them.
 
 [theme-sync]: https://github.com/omacom/omarchy-theme-sync
 

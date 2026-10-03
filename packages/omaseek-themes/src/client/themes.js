@@ -15,18 +15,23 @@
  * derived tokens are computed here.
  *
  * **`System` follows the desktop.** Where the Omarchy Theme Sync extension is
- * installed — see `desktop.js` — `System` takes its light/dark from Omarchy's
- * own `colors.toml` instead of `prefers-color-scheme`, and paints the palette
- * this package holds for the desktop's theme, matched on the slug Omarchy names
- * it with. A desktop theme with no palette here follows light/dark alone. A
- * card pressed is a choice of scheme as well as of palette — the chips move to
- * Light or Dark, because a palette chosen by hand is one the desktop no longer
- * drives, and the follow chip would claim otherwise — and pressing that chip is
- * what hands every scheme back to the desktop. With the extension installed the
- * chip is labelled **Omarchy**, because that names what the press actually
- * follows; without it the label stays **System**, and every rule above collapses
- * to what it was before: the harness's own scheme, and the automatic Catppuccin
- * pair.
+ * installed — see `desktop.js` — `System` takes its light/dark from the
+ * desktop's own colors rather than the browser's, and paints this package's
+ * port of the theme Omarchy names with that slug, or the desktop's own
+ * `colors.toml` read and derived where no port exists. The scheme is the one
+ * Omarchy itself resolves: the theme's `theme_type` where it has one, then its
+ * background — never the extension's default for a theme that names no mode. A
+ * port is worn only while it still agrees with the desktop's background, so an
+ * overlaid stock theme is painted from its own colors. A card pressed is a
+ * choice of scheme as well as of palette — the chips move to Light or Dark,
+ * because a palette chosen by hand is one the desktop no longer drives, and the
+ * follow chip would claim otherwise — and pressing that chip is what hands
+ * every scheme back to the desktop. With the extension installed the chip is
+ * labelled **Omarchy**, because that names what the press actually follows;
+ * without it the label stays **System**, and every rule above collapses to what
+ * it was before: the harness's own scheme, and the automatic Catppuccin pair.
+ * Nothing in this file needs Omarchy to run: without the extension every one of
+ * these branches is skipped, on any platform, and the plugin is what it was.
  *
  * Plain JavaScript ESM, because `build/bundle-client.mjs` rewrites it into the
  * page's closure factory: `react` comes off the module table the shell seeds,
@@ -36,7 +41,7 @@
 import React from 'react'
 import { distinctError, mix } from './color.js'
 import { colors, installed, osScheme, reading, watch, watchOsScheme } from './desktop.js'
-import { paletteFrom } from './desktop-palette.js'
+import { paletteFrom, portAgrees, schemeFrom } from './desktop-palette.js'
 import { fetchJson, insertSheet } from './dom.js'
 import { createNotifier, h } from './ui.js'
 
@@ -317,14 +322,33 @@ export function applyFeature(host) {
 
   /** Whether `id` is one of the palettes this package registered. */
   function registered(id) {
-    for (var i = 0; i < state.entries.length; i += 1) {
-      if (state.entries[i].id === id) return true
-    }
+    if (entryFor(id) !== null) return true
     var keys = Object.keys(derived)
     for (var k = 0; k < keys.length; k += 1) {
       if (derived[keys[k]] === id) return true
     }
     return false
+  }
+
+  /** The port registered under this id, or null. */
+  function entryFor(id) {
+    for (var i = 0; i < state.entries.length; i += 1) {
+      if (state.entries[i].id === id) return state.entries[i]
+    }
+    return null
+  }
+
+  /**
+   * The scheme the desktop is actually on.
+   *
+   * The extension's `mode` is not the whole answer: it defaults a theme with no
+   * `mode` line to dark, and most community themes ship no line at all, while
+   * Omarchy's own resolver reads such a theme from its background. The colours
+   * are on the page, so the same last resort is applied here — see `schemeFrom`,
+   * which is pure and knows nothing about Omarchy being present.
+   */
+  function desktopScheme() {
+    return schemeFrom(colors(), reading().mode)
   }
 
   /**
@@ -349,14 +373,15 @@ export function applyFeature(host) {
   function derivedFor(desktop) {
     var palette = paletteFrom(colors())
     if (palette === null) return null
-    var key = desktop.theme + '/' + desktop.mode
+    var scheme = desktopScheme()
+    var key = desktop.theme + '/' + scheme
     if (Object.prototype.hasOwnProperty.call(derived, key)) return derived[key]
-    var id = 'omaseek-desktop-' + desktop.theme + '-' + desktop.mode
+    var id = 'omaseek-desktop-' + desktop.theme + '-' + scheme
     derived[key] = id
     try {
       derivedOffs.push(theme.register({
         id: id,
-        colorScheme: desktop.mode,
+        colorScheme: scheme,
         tokens: tokensFor(palette),
       }))
     } catch (unregistered) {
@@ -372,8 +397,7 @@ export function applyFeature(host) {
    */
   function schemeInForce() {
     if (mode !== 'system') return mode
-    var desktop = reading()
-    return desktop.live ? desktop.mode : osScheme()
+    return reading().live ? desktopScheme() : osScheme()
   }
 
   /**
@@ -395,11 +419,14 @@ export function applyFeature(host) {
     if (mode === 'system') {
       var desktop = reading()
       if (desktop.live && desktop.theme !== '') {
-        // The hand-tuned port first, and only then the desktop's own colors:
-        // the port is a judgement about the theme that a derivation cannot
-        // reproduce, so it wins wherever it exists.
+        // The hand-tuned port first — it is a judgement about the theme that a
+        // derivation cannot reproduce — but only while it still describes what
+        // the desktop is wearing. A stock slug can be *overlaid* by the reader
+        // (a user theme directory with the same name, the stock files copied
+        // under it), and then the port is the one palette that is wrong.
         var ported = 'omarchy-' + desktop.theme
-        if (registered(ported)) return ported
+        var port = entryFor(ported)
+        if (port !== null && portAgrees(colors(), port.tokens)) return ported
         var own = derivedFor(desktop)
         if (own !== null) return own
       }
@@ -428,7 +455,12 @@ export function applyFeature(host) {
     if (mode !== 'system' || !installed()) return ''
     var desktop = reading()
     if (!desktop.live) return 'Omarchy Theme Sync has not reported a theme'
-    if (desktop.theme === '' || registered('omarchy-' + desktop.theme)) return ''
+    if (desktop.theme === '') return ''
+    // A port that still agrees is worn, and a derivation that succeeds paints
+    // the desktop's own colors; only neither leaves the Catppuccin pair, and
+    // that is the case with something to say about it.
+    var port = entryFor('omarchy-' + desktop.theme)
+    if (port !== null && portAgrees(colors(), port.tokens)) return ''
     return paletteFrom(colors()) === null
       ? 'the desktop theme "' + desktop.theme + '" reported no colors'
       : ''

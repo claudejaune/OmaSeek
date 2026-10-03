@@ -59,6 +59,14 @@ All notable changes to this project will be documented in this file.
 
 ## omaseek-themes
 
+### 0.2.1 - 2026-10-03
+
+#### Fixed
+
+- Custom themes now shade their sidebar, menus, cards and input fields instead of painting them all the page colour, including themes that only define terminal colours
+- Custom themes are read as light or dark from their background, so light ones are no longer mistaken for dark
+- A stock theme you have customized is now followed as customized, rather than wearing the original colours
+
 ### 0.2.0 - 2026-10-03
 
 #### Added

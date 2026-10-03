@@ -240,6 +240,44 @@ const LIGHT_COLORS = {
 }
 
 /**
+ * One real `colors.toml` as Omarchy writes it: Catppuccin's own file, canonical
+ * long names and all.
+ *
+ * The two fixtures above come from the extension's demo corpus, whose keys are
+ * the legacy short forms (`dark_bg`, `lighter_bg`). No Omarchy theme ships
+ * those — `omarchy-theme-color` accepts them as aliases, and all 22 stock themes
+ * write `dark_background`, `darker_background` and `lighter_background` — so a
+ * derivation that only understood the short forms looked right against those
+ * fixtures and collapsed every layer onto the page colour on a real desktop.
+ * That is why this map exists beside them. `mode` is absent because the
+ * extension strips it: the mode reaches a page as the `<html>` attribute.
+ */
+const REAL_COLORS = {
+  accent: '#89b4fa', selection: '#45475a', muted: '#585b70',
+  background: '#1e1e2e', dark_background: '#161622', darker_background: '#101019',
+  lighter_background: '#313244',
+  foreground: '#cdd6f4', dark_foreground: '#6c7086', light_foreground: '#bac2de',
+  bright_foreground: '#cdd6f4',
+  red: '#f38ba8', yellow: '#f9e2af', orange: '#f6b6ab', green: '#a6e3a1',
+  cyan: '#94e2d5', blue: '#89b4fa', magenta: '#f5c2e7', brown: '#7b5b55',
+}
+
+/**
+ * The palette a legacy theme gets: `omarchy-theme-set` generates a `colors.toml`
+ * from an `alacritty.toml` for a theme that ships none, and what it writes is
+ * exactly these keys — background, foreground, accent, selection and the ANSI
+ * sixteen. Nothing names a layer, so the derivation has to step them from the
+ * two anchors that are there.
+ */
+const LEGACY_COLORS = {
+  accent: '#89b4fa', selection: '#45475a', background: '#1e1e2e', foreground: '#cdd6f4',
+  color0: '#1e1e2e', color1: '#f38ba8', color2: '#a6e3a1', color3: '#f9e2af',
+  color4: '#89b4fa', color5: '#f5c2e7', color6: '#94e2d5', color7: '#cdd6f4',
+  color8: '#585b70', color9: '#f38ba8', color10: '#a6e3a1', color11: '#f9e2af',
+  color12: '#89b4fa', color13: '#f5c2e7', color14: '#94e2d5', color15: '#cdd6f4',
+}
+
+/**
  * The palette `paletteFrom` must build out of `DARK_COLORS`, worked out by hand
  * from the same relations the module documents — the anchor slots straight off
  * the theme's keys, the rest at the fitted ratios. Written out rather than
@@ -610,14 +648,17 @@ const PACKAGES = [
         themes: 5,
       },
       // A port beats a derivation wherever one exists: the hand-tuned 22 are a
-      // judgement about the theme that reading its colors back cannot reproduce.
-      // Tokyo Night is ported, so its own port is what is painted, and no
-      // second theme is registered for it.
+      // judgement about the theme that reading its colors back cannot reproduce,
+      // and on a stock theme nobody has touched the page colour the file reports
+      // *is* the port's — all 22 agree on it — so the port is what is painted
+      // and no second theme is registered for it. (The fixture's own ports all
+      // paint `#123456`, which is the background this map reports; a map from a
+      // different theme is the overlay case further down.)
       {
         label: 'a ported desktop theme still uses its port, not its colors',
         scheme: 'system', extension: true,
         desktop: { theme: 'tokyo-night', mode: 'dark' },
-        colors: DARK_COLORS,
+        colors: { background: '#123456', foreground: '#123456', accent: '#123456' },
         applied: 'omarchy-tokyo-night',
         themes: 4,
       },
@@ -692,6 +733,119 @@ const PACKAGES = [
         applied: 'omaseek-desktop-someone-elses-theme-dark',
         appliedLast: 'omaseek-desktop-another-theme-dark',
         themes: 6,
+      },
+      // A real `colors.toml` — Catppuccin's own, canonical long names and all.
+      // Every layer the harness gets is the theme's own step rather than the
+      // page colour, which is the whole difference between this and a flat
+      // palette, and the registered tokens are where it shows.
+      {
+        label: 'a community theme is painted in the layers its file names',
+        scheme: 'system', extension: true,
+        desktop: { theme: 'a-community-theme', mode: 'dark' },
+        colors: REAL_COLORS,
+        applied: 'omaseek-desktop-a-community-theme-dark',
+        registration: {
+          id: 'omaseek-desktop-a-community-theme-dark',
+          scheme: 'dark',
+          tokens: {
+            '--dsw-alias-bg-base': '#1e1e2e',
+            '--dsw-alias-bg-layer-1': '#161622',
+            '--dsw-alias-bg-layer-2': '#313244',
+            '--dsw-alias-bg-overlay': '#272738',
+            '--dsw-specific-input-major': '#101019',
+            '--dsw-alias-label-primary': '#cdd6f4',
+            '--dsw-alias-label-secondary': '#b1b9d4',
+            '--dsw-alias-label-tertiary': '#9297b1',
+            '--dsw-alias-brand-primary': '#89b4fa',
+            '--dsw-alias-state-error-primary': '#f38ba8',
+          },
+        },
+        themes: 5,
+      },
+      // The extension reports the mode it can see, which is `dark` for a theme
+      // that names none — and two thirds of the community themes sampled name
+      // none. The background is what Omarchy itself falls back to, so a light
+      // theme is followed as light however the extension answered.
+      {
+        label: 'a light theme with no mode line is followed as light',
+        scheme: 'system', extension: true,
+        desktop: { theme: 'a-light-theme', mode: 'dark' },
+        colors: { background: '#faf4ed', foreground: '#575279', accent: '#56949f' },
+        applied: 'omaseek-desktop-a-light-theme-light',
+        registration: {
+          id: 'omaseek-desktop-a-light-theme-light',
+          scheme: 'light',
+          tokens: { '--dsw-alias-bg-base': '#faf4ed' },
+        },
+        themes: 5,
+      },
+      // The legacy key its resolver reads before the background.
+      {
+        label: 'a legacy theme_type is what the scheme follows',
+        scheme: 'system', extension: true,
+        desktop: { theme: 'a-legacy-theme', mode: 'dark' },
+        colors: { theme_type: 'light', background: '#101010', foreground: '#e0e0e0', accent: '#ff8800' },
+        applied: 'omaseek-desktop-a-legacy-theme-light',
+        themes: 5,
+      },
+      // An overlay: Omarchy's preferred way to tweak a stock theme is a user
+      // directory with the same slug, stock files copied under it and the
+      // user's winning. The slug then still names this package's port while the
+      // desktop wears something else — and the background is what says so.
+      {
+        label: 'an overlaid stock theme is painted from the desktop, not the port',
+        scheme: 'system', extension: true,
+        desktop: { theme: 'catppuccin', mode: 'dark' },
+        colors: REAL_COLORS,
+        applied: 'omaseek-desktop-catppuccin-dark',
+        appliedLast: 'omaseek-desktop-catppuccin-dark',
+        themes: 5,
+      },
+      // And the port is still worn while its page colour is the desktop's,
+      // which is every stock theme nobody has overlaid. The fixture's port
+      // paints `#123456`, so this map agrees with it exactly.
+      {
+        label: 'a stock theme whose background still matches keeps its port',
+        scheme: 'system', extension: true,
+        desktop: { theme: 'catppuccin', mode: 'dark' },
+        colors: { background: '#123456', foreground: '#123456' },
+        applied: 'omarchy-catppuccin',
+        appliedLast: 'omarchy-catppuccin',
+        themes: 4,
+      },
+      // The palette a legacy theme actually gets: generated from its
+      // `alacritty.toml`, naming no layer at all. The steps are then derived
+      // from the two anchors it does name, so the sidebar, the overlay and the
+      // input field are not all the page colour.
+      {
+        label: 'a legacy palette with no layer keys is still layered',
+        scheme: 'system', extension: true,
+        desktop: { theme: 'a-legacy-theme', mode: 'dark' },
+        colors: LEGACY_COLORS,
+        applied: 'omaseek-desktop-a-legacy-theme-dark',
+        registration: {
+          id: 'omaseek-desktop-a-legacy-theme-dark',
+          scheme: 'dark',
+          tokens: {
+            '--dsw-alias-bg-base': '#1e1e2e',
+            '--dsw-alias-bg-layer-1': '#161622',
+            '--dsw-alias-bg-layer-2': '#2b2c3d',
+            '--dsw-alias-bg-overlay': '#242535',
+            '--dsw-specific-input-major': '#101018',
+            '--dsw-alias-state-error-primary': '#f38ba8',
+          },
+        },
+        themes: 5,
+      },
+      // The non-Omarchy shape: no extension, so there is no desktop to read
+      // whatever else a page may put on `window`, and every rule above is
+      // skipped rather than approximated. This is what other Linux, Windows and
+      // macOS run, and the one case that must never move for them.
+      {
+        label: 'with no extension the desktop colours are not looked at',
+        scheme: 'system', colors: REAL_COLORS,
+        applied: 'omarchy-catppuccin-latte', appliedLast: 'omarchy-catppuccin-latte',
+        themes: 4,
       },
     ],
   },
