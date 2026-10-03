@@ -13,7 +13,9 @@
  */
 import { readFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { mkdir, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { fileURLToPath } from 'node:url'
 
@@ -83,6 +85,81 @@ for (const dir of packages) {
   if (routes.length === 0) {
     console.log(`omaseek: ${manifest.name} — ${main} exports apply(), no routes (fine)`)
     continue
+  }
+
+  // The themes route, asked for real. It carries the 22 ports *and* the list of
+  // themes installed on the machine, so it is checked against fixtures under a
+  // temporary HOME rather than against whatever the machine running this happens
+  // to have installed: a developer's own theme collection must not decide
+  // whether the suite passes, and a machine with none must still be checked.
+  const themesRoute = routes.find((row) => row.path.endsWith('.themes'))
+  if (themesRoute !== undefined) {
+    const sandbox = join(tmpdir(), 'omaseek-check-hosts-' + process.pid)
+    const home = join(sandbox, 'home')
+    const omarchy = join(sandbox, 'omarchy')
+    const userThemes = join(home, '.config', 'omarchy', 'themes')
+    const saved = { HOME: process.env.HOME, OMARCHY_PATH: process.env.OMARCHY_PATH }
+    try {
+      const theme = async (root, slug, files) => {
+        await mkdir(join(root, slug), { recursive: true })
+        for (const [name, body] of Object.entries(files)) {
+          await writeFile(join(root, slug, name), body)
+        }
+      }
+      await theme(userThemes, 'modern', {
+        'colors.toml': 'mode = "dark"\nbackground = "#101010"\ndark_background = "#0a0a0a"\n'
+          + 'lighter_background = "#202020"\nforeground = "#e0e0e0"\naccent = "#ff8800"\n',
+      })
+      await theme(userThemes, 'legacy', {
+        'alacritty.toml': "[colors.primary]\nbackground = '#1a0d2e'\nforeground = '#d4a5ff'\n"
+          + "[colors.normal]\nblue = '#8b9aff'\nred = '#ff6ec7'\n"
+          + "[colors.bright]\nblue = '#b8c1ff'\n",
+      })
+      // A palette file with nothing quoted in it, and a directory with no
+      // palette at all: both are themes that cannot be painted.
+      await theme(userThemes, 'broken', { 'colors.toml': 'background = 12\n[table]\nx = { y = 1 }\n' })
+      await theme(userThemes, 'empty', { 'README.md': '# nothing\n' })
+      // Omarchy's own directory: one slug this package already ports, and one it
+      // has never heard of.
+      await theme(join(omarchy, 'themes'), 'catppuccin', { 'colors.toml': 'background = "#1e1e2e"\n' })
+      await theme(join(omarchy, 'themes'), 'nova', { 'colors.toml': 'background = "#001122"\nforeground = "#eeeeee"\n' })
+
+      process.env.HOME = home
+      process.env.OMARCHY_PATH = omarchy
+      const response = await themesRoute.fetch({ url: 'http://check/api/omaseek.themes' })
+      const body = await response.json()
+      const slugs = ((body.installed || {}).themes || []).map((one) => one.slug)
+      const names = ((body.installed || {}).themes || []).map((one) => one.name)
+      const bySlug = Object.fromEntries(((body.installed || {}).themes || []).map((one) => [one.slug, one]))
+
+      if (response.status !== 200) problems.push(`${manifest.name}: ${themesRoute.path} answered ${response.status}`)
+      else if (!Array.isArray(body.themes) || body.themes.length === 0) problems.push(`${manifest.name}: ${themesRoute.path} served no ports`)
+      else if (slugs.join(',') !== 'legacy,modern,nova') {
+        problems.push(`${manifest.name}: installed themes were ${JSON.stringify(slugs)},`
+          + ' expected legacy,modern,nova (broken and empty skipped, the ported catppuccin left to its own card)')
+      } else if (names.join(',') !== 'Legacy,Modern,Nova') {
+        problems.push(`${manifest.name}: installed theme names were ${JSON.stringify(names)}`)
+      } else if ((body.installed || {}).skipped !== 2) {
+        problems.push(`${manifest.name}: ${themesRoute.path} reported ${(body.installed || {}).skipped} unreadable, expected 2`)
+      } else if (bySlug.legacy.colors.color4 !== '#8b9aff' || bySlug.legacy.colors.background !== '#1a0d2e') {
+        problems.push(`${manifest.name}: a legacy theme's alacritty palette was not read back: `
+          + JSON.stringify(bySlug.legacy.colors))
+      } else if (bySlug.modern.colors.lighter_background !== '#202020') {
+        problems.push(`${manifest.name}: an installed theme's colors.toml was not served whole`)
+      } else {
+        console.log(`omaseek: ${manifest.name} — ${main} exports apply(), ${routes.length} route(s), `
+          + `${body.themes.length} ports and ${slugs.length} installed themes served`)
+        continue
+      }
+    } catch (error) {
+      problems.push(`${manifest.name}: ${themesRoute.path} threw — ${error.message}`)
+    } finally {
+      if (saved.HOME === undefined) delete process.env.HOME
+      else process.env.HOME = saved.HOME
+      if (saved.OMARCHY_PATH === undefined) delete process.env.OMARCHY_PATH
+      else process.env.OMARCHY_PATH = saved.OMARCHY_PATH
+      await rm(sandbox, { recursive: true, force: true })
+    }
   }
 
   // The one route that talks to the outside world: ask it for real, so a route

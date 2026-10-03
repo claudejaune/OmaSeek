@@ -576,23 +576,26 @@ function inkOn(brand) {
 }
 
 /**
- * The mode Omarchy would resolve for these colors, as far as a page can see it.
+ * The mode Omarchy would resolve for these colors.
  *
- * The extension answers `mode` or, when a theme names none, `dark` — and it
- * strips `mode` out of the map, so a page cannot tell "declared dark" from
- * "said nothing". Omarchy's own resolver falls through to the background when
- * the key is missing (`omarchy-theme-color`: a legacy `theme_type`, then a
- * `light.mode` file, then the background's channel sum), and most community
- * themes ship no `mode` at all, so the background is where the real answer is.
- * The `light.mode` file is not forwarded by the extension; a light theme is
- * still read as light here, because its background says so.
- * @param colors - `window.omarchy.colors()`, or anything else at all.
- * @param fallback - the mode the extension reported, used when nothing else answers.
+ * Omarchy's own precedence (`omarchy-theme-color`): the `mode` key, then the
+ * legacy `theme_type`, then a `light.mode` file beside the palette, then the
+ * background's channel sum, and dark as the last word. That is what this walks,
+ * in that order, as far as the map allows.
+ *
+ * Where the map comes from decides how much of it is visible. `window.omarchy`
+ * carries a live theme's colors with `mode` stripped out — and answers `dark`
+ * itself when a theme names none — so for a desktop in force the background is
+ * the first thing that actually answers. A map read by the host out of an
+ * installed theme's own file still has the key, and is believed.
+ * @param colors - `window.omarchy.colors()`, a host-read palette, or anything at all.
+ * @param fallback - the mode reported alongside, used when nothing else answers.
  * @returns `light` or `dark`.
  */
 function schemeFrom(colors, fallback) {
   if (colors !== null && typeof colors === 'object') {
-    var declared = colors.theme_type
+    var declared = colors.mode
+    if (declared !== 'light' && declared !== 'dark') declared = colors.theme_type
     if (declared === 'light' || declared === 'dark') return declared
     var light = isLight(first(colors, ['background', 'bg', 'color0']))
     if (light !== null) return light ? 'light' : 'dark'
@@ -1000,6 +1003,7 @@ var CSS = [
   '.omaseek-name{display:flex;justify-content:space-between;align-items:baseline;gap:6px;font-size:12px;',
   'color:var(--dsw-alias-label-primary)}',
   '.omaseek-tag{font-size:10px;color:var(--dsw-alias-label-tertiary)}',
+  '.omaseek-tags{display:flex;gap:5px;align-items:baseline;flex-shrink:0}',
   '.omaseek-warn{display:none;font-size:11px;line-height:1.6;color:var(--dsw-alias-state-warn-primary);max-width:62ch}',
   '.omaseek-error{font-size:12px;line-height:1.5;padding:10px 12px;border-radius:8px;white-space:pre-wrap;',
   'border:1px solid var(--dsw-alias-state-error-primary);color:var(--dsw-alias-state-error-primary)}',
@@ -1045,7 +1049,7 @@ function applyFeature(host) {
 
   // Package-local store: the palettes arrive asynchronously from the Host,
   // and the Settings page subscribes instead of polling.
-  var state = { entries: [], error: '', loading: true, corners: 'square' }
+  var state = { entries: [], error: '', loading: true, corners: 'square', custom: 0, unreadable: 0 }
   var notifier = createNotifier()
   var notify = notifier.notify
   var subscribe = notifier.subscribe
@@ -1118,6 +1122,28 @@ function applyFeature(host) {
   /** Disposers for `derived`, run only when this Package stops. */
   var derivedOffs = []
 
+  /**
+   * The scheme of each theme installed on this machine, by slug, as read from
+   * its own file by the host.
+   *
+   * The live path prefers this over what it can work out from the extension's
+   * map, because the file is the better source: it still has a `mode` key the
+   * extension strips, and the host read it on this side of the wire. It also
+   * keeps the two paths naming one theme with one id — the card the reader
+   * installed and the theme the desktop is wearing are the same card.
+   */
+  var installedSchemes = {}
+
+  /**
+   * The registered id of each installed theme, keyed `slug/scheme`.
+   *
+   * The live path asks this before deriving anything: the theme the desktop is
+   * wearing is very often one the host already read off the disk, and reusing
+   * that registration is what makes the card the reader is looking at and the
+   * theme they are wearing the same theme rather than two.
+   */
+  var installedIds = {}
+
   /** Whether `id` is one of the palettes this package registered. */
   function registered(id) {
     if (entryFor(id) !== null) return true
@@ -1143,9 +1169,13 @@ function applyFeature(host) {
    * `mode` line to dark, and most community themes ship no line at all, while
    * Omarchy's own resolver reads such a theme from its background. The colours
    * are on the page, so the same last resort is applied here — see `schemeFrom`,
-   * which is pure and knows nothing about Omarchy being present.
+   * which is pure and knows nothing about Omarchy being present. An installed
+   * theme's own file answers first where the host has read it.
    */
   function desktopScheme() {
+    var slug = reading().theme
+    var known = installedSchemes[slug]
+    if (known === 'light' || known === 'dark') return known
     return schemeFrom(colors(), reading().mode)
   }
 
@@ -1225,6 +1255,11 @@ function applyFeature(host) {
         var ported = 'omarchy-' + desktop.theme
         var port = entryFor(ported)
         if (port !== null && portAgrees(colors(), port.tokens)) return ported
+        // A theme the host read off the disk is registered already, under the
+        // id this would compute for it — and that registration knows a `mode`
+        // the extension stripped. Prefer it over deriving a second copy.
+        var read = installedIds[desktop.theme + '/' + desktopScheme()]
+        if (read !== undefined) return read
         var own = derivedFor(desktop)
         if (own !== null) return own
       }
@@ -1382,6 +1417,7 @@ function applyFeature(host) {
     var disposers = []
     fetchJson('/api/omaseek.themes').then(function (result) {
       var themes = (result && result.themes) || []
+      var installed = (result && result.installed) || {}
       var entries = []
       try {
         for (var i = 0; i < themes.length; i += 1) {
@@ -1392,6 +1428,43 @@ function applyFeature(host) {
           disposers.push(theme.register({ id: id, colorScheme: raw.scheme, tokens: tokens }))
           entries.push({ id: id, name: raw.name, scheme: raw.scheme, tokens: tokens })
         }
+        // The themes installed on this machine, in one list with the 22. Each
+        // arrives as its own file's colors, so the same derivation the desktop's
+        // live theme goes through builds its tokens — one implementation of what
+        // a `colors.toml` means, and the one already checked against all 22
+        // real files.
+        var schemes = {}
+        var custom = 0
+        var unreadable = Number(installed.skipped) || 0
+        var listed = installed.themes || []
+        var taken = {}
+        for (var t = 0; t < entries.length; t += 1) taken[entries[t].id] = true
+        for (var j = 0; j < listed.length; j += 1) {
+          var own = listed[j]
+          var palette = paletteFrom(own.colors)
+          if (palette === null) {
+            unreadable += 1
+            continue
+          }
+          var ownScheme = schemeFrom(own.colors, null)
+          schemes[own.slug] = ownScheme
+          var ownId = 'omaseek-desktop-' + own.slug + '-' + ownScheme
+          // Recorded before any skip, because the id is the same whether this
+          // pass registers it or the live path got there first.
+          installedIds[own.slug + '/' + ownScheme] = ownId
+          // The live path may have registered this theme already — it is the
+          // same id, so the desktop's own theme is this card and not a copy.
+          if (taken[ownId] === true || registered(ownId)) continue
+          var ownTokens = tokensFor(palette)
+          if (!live) return
+          disposers.push(theme.register({ id: ownId, colorScheme: ownScheme, tokens: ownTokens }))
+          taken[ownId] = true
+          custom += 1
+          entries.push({ id: ownId, name: own.name, scheme: ownScheme, tokens: ownTokens, custom: true })
+        }
+        installedSchemes = schemes
+        state.custom = custom
+        state.unreadable = unreadable
       } catch (registerError) {
         // A throw mid-loop leaves the earlier registrations owned by this
         // effect, so stopping still cleans them up.
@@ -1492,11 +1565,14 @@ function applyFeature(host) {
     }, [])
 
     var snapshot = theme.getTheme()
-    // The filter rule: registered themes carry exactly one colorScheme, so the
-    // list follows the scheme in force — the desktop's while System follows it,
-    // the reader's own Light or Dark otherwise.
+    // One list, both schemes. A registered theme still carries exactly one
+    // `colorScheme` — that is what the presenter paints `body` from, so pressing
+    // a light card in a dark app repaints it light — but the picker no longer
+    // hides half the themes behind the one currently in force. The chips are
+    // what changes the scheme; a card is a palette, and choosing one moves the
+    // chips to the scheme it belongs to.
     var scheme = schemeInForce()
-    var listed = state.entries.filter(function (entry) { return entry.scheme === scheme })
+    var listed = state.entries
 
     function choose(entry) {
       // Pressing the palette already in force is not a choice. While System
@@ -1605,16 +1681,20 @@ function applyFeature(host) {
     // wearing, either because nothing was reported or because what was reported
     // could not be painted. Said in the count line rather than a row of its own,
     // and said only when it is true.
-    var unreadable = unpaintableNote()
+    var desktopNote = unpaintableNote()
 
+    // The count line carries what the grid cannot say for itself: how many
+    // themes are the machine's own, how many could not be read at all, and
+    // whether the scheme in force is the automatic pair rather than any card.
     children.push(h('div', { key: 'legend', className: 'omaseek-row' },
-      h('span', { className: 'omaseek-legend' }, scheme === 'light' ? 'Light themes' : 'Dark themes'),
+      h('span', { className: 'omaseek-legend' }, 'Themes'),
       h('span', { className: 'omaseek-count' }, state.loading
         ? 'loading palettes\u2026'
-        : listed.length + ' of ' + state.entries.filter(function (entry) {
-          return entry.scheme === scheme
-        }).length + (choices[scheme] === undefined ? ' \u00b7 automatic' : '')
-        + (unreadable === '' ? '' : ' \u00b7 ' + unreadable))))
+        : listed.length + ' themes'
+          + (state.custom === 0 ? '' : ' \u00b7 ' + state.custom + ' installed')
+          + (state.unreadable === 0 ? '' : ' \u00b7 ' + state.unreadable + ' unreadable')
+          + (choices[scheme] === undefined ? ' \u00b7 automatic' : '')
+          + (desktopNote === '' ? '' : ' \u00b7 ' + desktopNote))))
 
     children.push(h('div', { key: 'grid', className: 'omaseek-grid' },
       listed.map(function (entry) {
@@ -1628,7 +1708,9 @@ function applyFeature(host) {
           h(Swatch, { tokens: entry.tokens }),
           h('div', { className: 'omaseek-name' },
             h('span', null, entry.name),
-            snapshot.active.id === entry.id ? h('span', { className: 'omaseek-tag' }, 'active') : null))
+            h('span', { className: 'omaseek-tags' },
+              snapshot.active.id === entry.id ? h('span', { className: 'omaseek-tag' }, 'active') : null,
+              entry.custom === true ? h('span', { className: 'omaseek-tag' }, 'custom') : null)))
       })))
 
     return h('div', { className: 'omaseek' }, children)

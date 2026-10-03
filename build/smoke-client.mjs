@@ -847,6 +847,126 @@ const PACKAGES = [
         applied: 'omarchy-catppuccin-latte', appliedLast: 'omarchy-catppuccin-latte',
         themes: 4,
       },
+      // One list, both schemes: the light ports are on screen in a dark app, and
+      // the count line says how many themes there are rather than how many the
+      // scheme happens to allow.
+      {
+        label: 'light and dark themes are one list',
+        scheme: 'dark',
+        cards: { Catppuccin: 1, 'Tokyo Night': 1, White: 1, 'Catppuccin Latte': 1 },
+        cardTags: { Catppuccin: 'active', White: null },
+        expectSectionText: '4 themes',
+        themes: 4,
+      },
+      // And a card of the other scheme is a press that works: the app repaints
+      // light because the theme says it is light, and the chips move with it so
+      // the switch is not hidden.
+      {
+        label: 'a light card pressed in a dark app moves the chips to Light',
+        scheme: 'dark', pressCard: 'White',
+        chips: { Light: true, Dark: false },
+        appliedLast: 'omarchy-white',
+        themes: 4,
+      },
+      // The themes installed on the machine arrive from the host as their own
+      // files, and are registered through the same derivation as the live
+      // desktop theme — so the card is layered like the theme it names.
+      {
+        label: 'an installed theme is a card, derived from its own file',
+        scheme: 'dark',
+        installed: { themes: [{ slug: 'my-theme', name: 'My Theme', colors: REAL_COLORS }], skipped: 0 },
+        cards: { 'My Theme': 1 },
+        cardTags: { 'My Theme': 'custom' },
+        registration: {
+          id: 'omaseek-desktop-my-theme-dark',
+          scheme: 'dark',
+          tokens: {
+            '--dsw-alias-bg-base': '#1e1e2e',
+            '--dsw-alias-bg-layer-1': '#161622',
+            '--dsw-alias-bg-layer-2': '#313244',
+          },
+        },
+        expectSectionText: '5 themes \u00b7 1 installed',
+        themes: 5,
+      },
+      // A theme the machine installed under a name this package already ports —
+      // an edited stock theme — gets a card of its own rather than being hidden
+      // behind the port, and the port keeps its own card beside it.
+      {
+        label: 'an installed theme that shadows a port gets its own card',
+        scheme: 'dark',
+        installed: { themes: [{ slug: 'catppuccin', name: 'Catppuccin', colors: REAL_COLORS }], skipped: 0 },
+        cards: { Catppuccin: 2 },
+        registration: { id: 'omaseek-desktop-catppuccin-dark', scheme: 'dark' },
+        themes: 5,
+      },
+      // A palette generated from an `alacritty.toml` names no layer, and is
+      // stepped from its anchors like any other — the shape nearly half the
+      // community themes ship.
+      {
+        label: 'an installed legacy palette is layered too',
+        scheme: 'dark',
+        installed: { themes: [{ slug: 'legacy-one', name: 'Legacy One', colors: LEGACY_COLORS }], skipped: 0 },
+        registration: {
+          id: 'omaseek-desktop-legacy-one-dark',
+          scheme: 'dark',
+          tokens: {
+            '--dsw-alias-bg-layer-1': '#161622',
+            '--dsw-alias-bg-layer-2': '#2b2c3d',
+            '--dsw-specific-input-major': '#101018',
+          },
+        },
+        cards: { 'Legacy One': 1 },
+        themes: 5,
+      },
+      // Colours that will not read are counted rather than listed — the host's
+      // own count and the ones the browser could not derive, in one number.
+      {
+        label: 'an installed theme with no readable colours is counted',
+        scheme: 'dark',
+        installed: {
+          themes: [{ slug: 'broken', name: 'Broken', colors: { name: 'not a colour' } }],
+          skipped: 1,
+        },
+        cards: { Broken: 0 },
+        expectSectionText: '4 themes \u00b7 2 unreadable',
+        themes: 4,
+      },
+      // The scheme a file declares is the scheme it is listed under: the host
+      // read the file, so the `mode` key survives, where the extension strips it.
+      {
+        label: 'an installed theme that declares its mode is believed',
+        scheme: 'dark',
+        installed: {
+          themes: [{
+            slug: 'declared',
+            name: 'Declared',
+            colors: { mode: 'light', background: '#faf4ed', foreground: '#575279' },
+          }],
+          skipped: 0,
+        },
+        registration: { id: 'omaseek-desktop-declared-light', scheme: 'light' },
+        themes: 5,
+      },
+      // And where the desktop is wearing a theme the host read, that reading is
+      // what the follow path uses — one id, one scheme, whichever path got there
+      // first.
+      {
+        label: 'the live path agrees with the file the host read',
+        scheme: 'system', extension: true,
+        desktop: { theme: 'declared', mode: 'dark' },
+        installed: {
+          themes: [{
+            slug: 'declared',
+            name: 'Declared',
+            colors: { mode: 'light', background: '#faf4ed', foreground: '#575279' },
+          }],
+          skipped: 0,
+        },
+        applied: 'omaseek-desktop-declared-light',
+        appliedLast: 'omaseek-desktop-declared-light',
+        themes: 5,
+      },
     ],
   },
   {
@@ -1165,6 +1285,13 @@ function chipSaying(nodes, label) {
     && hasText(node, label))
 }
 
+/** One of the settings page's theme cards, found by the name printed on it. */
+function cardsSaying(nodes, label) {
+  return nodes.filter((node) => typeof node.props.className === 'string'
+    && node.props.className.split(' ').includes('omaseek-card')
+    && hasText(node, label))
+}
+
 /**
  * Every host element in a rendered tree, children and all. Reading the card
  * again after an interaction is what shows what the interaction changed.
@@ -1297,7 +1424,14 @@ async function runCase(pkg, testCase) {
 
   let stationCalls = 0
   globalThis.fetch = async (path) => {
-    if (path === '/api/omaseek.themes') return jsonResponse(THEMES)
+    // The host's one route: the 22 ports, and whatever it found installed on
+    // the machine. A case with no `installed` is a machine that has none —
+    // which is every machine that is not Omarchy.
+    if (path === '/api/omaseek.themes') {
+      return jsonResponse(Object.assign({}, THEMES, {
+        installed: testCase.installed === undefined ? { themes: [], skipped: 0 } : testCase.installed,
+      }))
+    }
     // The station's catalogue, and the only route the music card asks for.
     if (path === '/api/omaseek.music.tracks') {
       stationCalls += 1
@@ -1481,6 +1615,24 @@ async function runCase(pkg, testCase) {
     else if ((chip.props['data-on'] === '1') !== lit) {
       problems.push(`the "${label}" chip is ${chip.props['data-on'] === '1' ? 'lit' : 'dark'},`
         + ` expected ${lit ? 'lit' : 'dark'}`)
+    }
+  }
+
+  // The cards the grid offers, counted by the name printed on them — which is
+  // how "both schemes are in one list" and "an installed theme that shadows a
+  // port gets its own card" are told apart from "the list is half missing".
+  for (const [label, expected] of Object.entries(testCase.cards === undefined ? {} : testCase.cards)) {
+    const found = cardsSaying(nodes, label)
+    if (found.length !== expected) {
+      problems.push(`${found.length} "${label}" card(s) on the settings page, expected ${expected}`)
+    } else if (expected > 0 && testCase.cardTags !== undefined && testCase.cardTags[label] !== undefined) {
+      const tag = testCase.cardTags[label]
+      if (tag !== null && !hasText(found[0], tag)) {
+        problems.push(`the "${label}" card does not wear the "${tag}" tag`)
+      }
+      if (tag === null && (hasText(found[0], 'custom') || hasText(found[0], 'active'))) {
+        problems.push(`the "${label}" card wears a tag where none was expected`)
+      }
     }
   }
 

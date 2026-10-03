@@ -103,10 +103,11 @@ still has a sidebar, an overlay and an input field rather than five copies of th
 thirds of the community themes sampled, and every generated palette, because
 `omarchy-theme-color` writes no mode line. Omarchy's own resolver falls through a legacy
 `theme_type` key and then the background's channel sum (above 382 is light), and that is what
-this follows: `theme_type` where the theme has one, then its background, then the extension's
-answer as the last resort. The `light.mode` marker file beside a legacy `colors.toml` is the
-one step of Omarchy's cascade the extension does not forward — and a light palette says the
-same thing through its background, which is why that step is not missed in practice.
+this follows: `mode` and `theme_type` where the map carries them — the host's own read of an
+installed theme does — then the background, then the extension's answer as the last resort. The
+`light.mode` marker file beside a legacy `colors.toml` is the one step of Omarchy's cascade that
+neither route forwards; a light palette says the same thing through its background, which is why
+that step is not missed in practice.
 
 **A port is worn only while it still agrees.** Omarchy's own guide calls a user theme
 directory with the same slug the preferred way to *tweak* a stock theme — the stock files are
@@ -116,7 +117,9 @@ desktop wears colours the port has never seen. So the port is used only while it
 all 22 untouched stock themes — and an overlaid one is painted from its own colors like any
 community theme. The rest of a port is this package's reading of the theme's *look*, which the
 home page and the desktop differ on for 7 of the 22; comparing those would discard the port for
-themes nobody has touched.
+themes nobody has touched. Where the host has read that theme's own file, the follow path uses
+the registration the card already has rather than deriving a second copy — one theme, one id,
+whichever path asked first.
 
 `brandInk` is the one rule that is a judgement rather than a blend: Omarchy inks a brand fill
 with either `#0c0e10` or white, and the extension does not say which. Picking by better WCAG
@@ -166,15 +169,35 @@ needs a fallback for those machines because nothing here is asked of them.
 [theme-sync]: https://github.com/omacom/omarchy-theme-sync
 
 Each theme is registered with the `colorScheme` Omarchy assigns it, so every theme is half
-of a pair — a dark theme has no light variant. The picker therefore reads
-`getTheme().active.colorScheme` and lists only the themes belonging to the scheme now in
-force: the **5 light** palettes (`catppuccin-latte`, `flexoki-light`, `lupine`, `rose-pine`,
-`white`) while the app is light, the **17 dark** ones while it is dark. The Light / Dark /
-System (or **Omarchy**, with the extension) chips switch the scheme — and with it, which set you
-can pick from.
+of a pair — a dark theme has no light variant. The picker lists **all of them in one grid**,
+light and dark together, sorted by name: the scheme a theme declares is what the presenter
+paints `body` from, not a reason to hide it, so pressing a light card in a dark app repaints the
+app light. The figure is the card's own palette, which its miniature already shows. The
+Light / Dark / System (or **Omarchy**, with the extension) chips are what change the *scheme* —
+Light and Dark being the harness's own palettes rather than any card — and pressing a card
+moves the chips to the scheme that card belongs to.
 
 The token pairs in `Theme.listTokens` are *not* this mechanism: a pair is one active theme's
 own light and dark values, not two themes.
+
+**The themes installed on the machine are cards too.** On Omarchy, everything under
+`~/.config/omarchy/themes` — and anything Omarchy itself ships beyond the 22 ports, read from
+`$OMARCHY_PATH/themes` — is listed beside them, drawn from its own colours and tagged
+**custom** in the card. That list is a filesystem question, so it is answered by the Node half:
+the browser cannot read a directory. The host walks Omarchy's own two roots in its own order
+(the reader's copy wins a name), takes each theme's `colors.toml`, and for a theme that ships
+none — nearly half the community themes, since `omarchy-theme-set` generates one from an
+`alacritty.toml` — reads that instead, in the shape the generator would have produced
+(`accent`, `selection`, the two anchors, and the ANSI sixteen with bright falling back to
+normal). Each theme's colours then go through the *same* derivation the desktop's live theme
+does, so there is one implementation of what a `colors.toml` means and it is the one checked
+against all 22 real files. A theme whose colours will not read at all is counted in the section's
+count line rather than listed.
+
+The platform gate is that filesystem and nothing else: a machine that is not Omarchy has no such
+directory, so nothing is listed, and the 22 ports are the whole picker exactly as before. The
+badge the card wears is the one mark of where it came from — a port is this package's, a card
+with **custom** on it is the machine's.
 
 ### OmaPixel — the hero
 

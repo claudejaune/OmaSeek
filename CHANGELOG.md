@@ -59,6 +59,14 @@ All notable changes to this project will be documented in this file.
 
 ## omaseek-themes
 
+### 0.3.0 - 2026-10-03
+
+#### Added
+
+- Light and dark themes are one list, so every theme is one scroll away instead of half of them being hidden by the scheme you are in; pressing one applies it and the Light or Dark button lights up to match
+- On Omarchy, the themes installed on your machine appear in the same list, in the same card style, tagged custom — including themes that only define terminal colours
+- A theme from Omarchy's own package that this plugin does not ship appears as a card too, so a newer Omarchy is not a shorter list
+
 ### 0.2.1 - 2026-10-03
 
 #### Fixed

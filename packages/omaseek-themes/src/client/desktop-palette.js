@@ -159,23 +159,26 @@ function inkOn(brand) {
 }
 
 /**
- * The mode Omarchy would resolve for these colors, as far as a page can see it.
+ * The mode Omarchy would resolve for these colors.
  *
- * The extension answers `mode` or, when a theme names none, `dark` — and it
- * strips `mode` out of the map, so a page cannot tell "declared dark" from
- * "said nothing". Omarchy's own resolver falls through to the background when
- * the key is missing (`omarchy-theme-color`: a legacy `theme_type`, then a
- * `light.mode` file, then the background's channel sum), and most community
- * themes ship no `mode` at all, so the background is where the real answer is.
- * The `light.mode` file is not forwarded by the extension; a light theme is
- * still read as light here, because its background says so.
- * @param colors - `window.omarchy.colors()`, or anything else at all.
- * @param fallback - the mode the extension reported, used when nothing else answers.
+ * Omarchy's own precedence (`omarchy-theme-color`): the `mode` key, then the
+ * legacy `theme_type`, then a `light.mode` file beside the palette, then the
+ * background's channel sum, and dark as the last word. That is what this walks,
+ * in that order, as far as the map allows.
+ *
+ * Where the map comes from decides how much of it is visible. `window.omarchy`
+ * carries a live theme's colors with `mode` stripped out — and answers `dark`
+ * itself when a theme names none — so for a desktop in force the background is
+ * the first thing that actually answers. A map read by the host out of an
+ * installed theme's own file still has the key, and is believed.
+ * @param colors - `window.omarchy.colors()`, a host-read palette, or anything at all.
+ * @param fallback - the mode reported alongside, used when nothing else answers.
  * @returns `light` or `dark`.
  */
 export function schemeFrom(colors, fallback) {
   if (colors !== null && typeof colors === 'object') {
-    var declared = colors.theme_type
+    var declared = colors.mode
+    if (declared !== 'light' && declared !== 'dark') declared = colors.theme_type
     if (declared === 'light' || declared === 'dark') return declared
     var light = isLight(first(colors, ['background', 'bg', 'color0']))
     if (light !== null) return light ? 'light' : 'dark'
