@@ -747,6 +747,27 @@ exports["insertSheet"] = insertSheet
 
 exports["fetchJson"] = fetchJson
 	};
+	__defs["slug.js"] = (module, exports, __req) => {
+/**
+ * The name Omarchy prints for a theme slug.
+ *
+ * `omarchy theme list` runs its directory names through
+ * `sed -E 's/(^|-)([a-z])/\1\u\2/g; s/-/ /g'`, and that is how a reader
+ * recognises a theme — "Catppuccin Latte", not "catppuccin-latte". Both halves
+ * of this package need it: the Node half names the themes it finds on the
+ * machine, and the browser half names themes it only ever saw go past on the
+ * desktop. It lives on its own so the two cannot drift.
+ * @param slug - a theme directory name.
+ * @returns the name Omarchy would print for it.
+ */
+function prettyName(slug) {
+  return String(slug)
+    .replace(/(^|-)([a-z])/g, function (match, lead, letter) { return lead + letter.toUpperCase() })
+    .replace(/-/g, ' ')
+}
+
+exports["prettyName"] = prettyName
+	};
 	__defs["client/ui.js"] = (module, exports, __req) => {
 /**
  * The two things every browser feature here builds with: `h`, and the listener
@@ -843,6 +864,7 @@ const portAgrees = __req("client/desktop-palette.js").portAgrees
 const schemeFrom = __req("client/desktop-palette.js").schemeFrom
 const fetchJson = __req("client/dom.js").fetchJson
 const insertSheet = __req("client/dom.js").insertSheet
+const prettyName = __req("slug.js").prettyName
 const createNotifier = __req("client/ui.js").createNotifier
 const h = __req("client/ui.js").h
 
@@ -1079,6 +1101,58 @@ function applyFeature(host) {
   }
 
   /**
+   * The themes this browser has seen the desktop wear, remembered by slug and
+   * scheme.
+   *
+   * The installed-theme list comes from the machine the harness runs on, which
+   * is not always the machine the reader is sitting at: run the server on one
+   * box and the browser on another and that list is empty, while following the
+   * desktop still works, because the extension reports into the page. The
+   * browser is therefore the only side that ever sees those themes — so it
+   * keeps the ones it has seen, and they come back as cards on the next load.
+   * Recency is not tracked: the cap is generous, and using a theme again after
+   * it falls out simply writes it back.
+   */
+  var REMEMBERED_KEY = 'omaseek.desktop'
+
+  /** How many seen themes to keep. */
+  var REMEMBERED_MAX = 40
+
+  function loadRemembered() {
+    try {
+      var raw = window.localStorage.getItem(REMEMBERED_KEY)
+      if (raw === null) return {}
+      var parsed = JSON.parse(raw)
+      return parsed !== null && typeof parsed === 'object' ? parsed : {}
+    } catch (unavailable) {
+      return {}
+    }
+  }
+
+  /** Keep one theme the desktop has reported, for the cards of a later page. */
+  function rememberTheme(slug, scheme, map) {
+    if (slug === '' || map === null || map === undefined) return
+    var remembered = loadRemembered()
+    var key = slug + '/' + scheme
+    if (Object.prototype.hasOwnProperty.call(remembered, key)) return
+    remembered[key] = { slug: slug, scheme: scheme, colors: map, at: Date.now() }
+    var keys = Object.keys(remembered)
+    if (keys.length > REMEMBERED_MAX) {
+      // Oldest first seen goes. A theme that falls out and is used again is
+      // simply written back, so nothing is lost for good.
+      keys.sort(function (left, right) {
+        return (remembered[left].at || 0) - (remembered[right].at || 0)
+      })
+      for (var i = 0; i < keys.length - REMEMBERED_MAX; i += 1) delete remembered[keys[i]]
+    }
+    try {
+      window.localStorage.setItem(REMEMBERED_KEY, JSON.stringify(remembered))
+    } catch (unavailable) {
+      // A theme that cannot be remembered is not an error; it just has no card.
+    }
+  }
+
+  /**
    * The harness's scheme preference, mirrored here — `light`, `dark` or
    * `system`.
    *
@@ -1199,9 +1273,13 @@ function applyFeature(host) {
    * @returns the theme id, or null when the colors were not readable.
    */
   function derivedFor(desktop) {
-    var palette = paletteFrom(colors())
+    var map = colors()
+    var palette = paletteFrom(map)
     if (palette === null) return null
     var scheme = desktopScheme()
+    // Kept for the cards of a page whose host cannot see this machine's themes:
+    // this is the only moment anything ever knows this theme exists.
+    rememberTheme(desktop.theme, scheme, map)
     var key = desktop.theme + '/' + scheme
     if (Object.prototype.hasOwnProperty.call(derived, key)) return derived[key]
     var id = 'omaseek-desktop-' + desktop.theme + '-' + scheme
@@ -1428,39 +1506,55 @@ function applyFeature(host) {
           disposers.push(theme.register({ id: id, colorScheme: raw.scheme, tokens: tokens }))
           entries.push({ id: id, name: raw.name, scheme: raw.scheme, tokens: tokens })
         }
-        // The themes installed on this machine, in one list with the 22. Each
-        // arrives as its own file's colors, so the same derivation the desktop's
-        // live theme goes through builds its tokens — one implementation of what
-        // a `colors.toml` means, and the one already checked against all 22
-        // real files.
+        // The themes that are the machine's own, in one list with the 22. Each
+        // arrives as its own file's colours — or, for one only ever seen go past
+        // on the desktop, as the colours the extension reported — so the same
+        // derivation the desktop's live theme goes through builds its tokens:
+        // one implementation of what a `colors.toml` means, the one already
+        // checked against all 22 real files.
         var schemes = {}
         var custom = 0
         var unreadable = Number(installed.skipped) || 0
-        var listed = installed.themes || []
         var taken = {}
         for (var t = 0; t < entries.length; t += 1) taken[entries[t].id] = true
-        for (var j = 0; j < listed.length; j += 1) {
-          var own = listed[j]
-          var palette = paletteFrom(own.colors)
-          if (palette === null) {
+
+        function addOwn(slug, name, ownColors) {
+          var ownPalette = paletteFrom(ownColors)
+          if (ownPalette === null) {
             unreadable += 1
-            continue
+            return
           }
-          var ownScheme = schemeFrom(own.colors, null)
-          schemes[own.slug] = ownScheme
-          var ownId = 'omaseek-desktop-' + own.slug + '-' + ownScheme
+          var ownScheme = schemeFrom(ownColors, null)
+          schemes[slug] = ownScheme
+          var ownId = 'omaseek-desktop-' + slug + '-' + ownScheme
           // Recorded before any skip, because the id is the same whether this
           // pass registers it or the live path got there first.
-          installedIds[own.slug + '/' + ownScheme] = ownId
+          installedIds[slug + '/' + ownScheme] = ownId
           // The live path may have registered this theme already — it is the
           // same id, so the desktop's own theme is this card and not a copy.
-          if (taken[ownId] === true || registered(ownId)) continue
-          var ownTokens = tokensFor(palette)
+          if (taken[ownId] === true || registered(ownId)) return
+          var ownTokens = tokensFor(ownPalette)
           if (!live) return
           disposers.push(theme.register({ id: ownId, colorScheme: ownScheme, tokens: ownTokens }))
           taken[ownId] = true
           custom += 1
-          entries.push({ id: ownId, name: own.name, scheme: ownScheme, tokens: ownTokens, custom: true })
+          entries.push({ id: ownId, name: name, scheme: ownScheme, tokens: ownTokens, custom: true })
+        }
+
+        var listed = installed.themes || []
+        for (var j = 0; j < listed.length; j += 1) {
+          addOwn(listed[j].slug, listed[j].name, listed[j].colors)
+        }
+        // Then the themes this browser has seen the desktop wear, which is the
+        // only list there is when the harness runs on a different machine than
+        // the one with the themes on it. The host's own list wins a name, since
+        // it was read from the file rather than from what went past.
+        var remembered = loadRemembered()
+        var seen = Object.keys(remembered)
+        for (var r = 0; r < seen.length; r += 1) {
+          var past = remembered[seen[r]]
+          if (past === null || typeof past !== 'object' || past.slug === undefined) continue
+          addOwn(past.slug, prettyName(past.slug), past.colors)
         }
         installedSchemes = schemes
         state.custom = custom
@@ -1512,7 +1606,22 @@ function applyFeature(host) {
     var off = ctx.on('theme/change', function (snapshot) {
       // A reader's preference, from this picker or the Appearance row in
       // General. A theme id is this Plugin's own write and is left alone.
-      if (PREFERENCES.indexOf(snapshot.preference) >= 0) rememberMode(snapshot.preference)
+      //
+      // The chips set the mode before they write the preference, so a valid
+      // preference that is *not* the mode being held did not come from them: it
+      // is the Appearance row, which is the one control that means the harness's
+      // own palettes. Read it that way — Light or Dark there pins that scheme to
+      // the harness palette, System hands both schemes back to the desktop —
+      // or the row would set a preference this picker then paints over.
+      if (PREFERENCES.indexOf(snapshot.preference) >= 0 && snapshot.preference !== mode) {
+        if (snapshot.preference === 'system') {
+          delete choices.light
+          delete choices.dark
+        } else {
+          choices[snapshot.preference] = HARNESS
+        }
+        rememberMode(snapshot.preference)
+      }
       repair()
     })
     return function () {
@@ -1587,7 +1696,10 @@ function applyFeature(host) {
       // would claim the desktop still has a say in a palette it no longer
       // touches, and the next desktop switch would visibly do nothing.
       choices[entry.scheme] = entry.id
-      var fromSystem = mode === 'system'
+      // The schemes are one list now, so a press can move the scheme as well as
+      // the palette — and the harness's own settings have to be told, or the
+      // next settings write would adopt the old scheme and drag the app back.
+      var moved = mode !== entry.scheme
       rememberMode(entry.scheme)
       try {
         // The durable half: the harness's settings take only light/dark/system,
@@ -1595,7 +1707,7 @@ function applyFeature(host) {
         // first and the palette second, both inside this one click, so the
         // harness's own palette is never the last one the presenter is handed —
         // the pick is, and no paint happens in between.
-        if (fromSystem) theme.setTheme(entry.scheme)
+        if (moved) theme.setTheme(entry.scheme)
         theme.setTheme(entry.id)
       } catch (error) {
         state.error = String((error && error.message) || error)
@@ -1603,17 +1715,21 @@ function applyFeature(host) {
       }
     }
 
-    // The harness's own palettes, always available. Picking Light or Dark is
-    // also the opt-out for that scheme: it stops the automatic Catppuccin — or
-    // the desktop — from painting over the choice on the next scheme change.
-    // System forgets both slots, which is how a reader gets back to automatic,
-    // and with the extension installed it is what follows the desktop.
+    // The pair this package opens on, for that scheme. Light and Dark are the
+    // default palettes rather than an escape hatch: pressing one puts Catppuccin
+    // Latte or Catppuccin in force, remembers it as that scheme's pick, and the
+    // card lights up with it. System forgets both slots, which is how a reader
+    // gets back to following the desktop. The harness's own palettes were never
+    // a thing an Omarchy picker offered — they are the Appearance row's, in
+    // General, and the change listener reads that press the way it reads this
+    // one: Light or Dark there is the harness's palette for that scheme, System
+    // is what follows.
     function base(id) {
       if (id === 'system') {
         delete choices.light
         delete choices.dark
       } else {
-        choices[id] = HARNESS
+        choices[id] = AUTOMATIC[id] === undefined ? HARNESS : AUTOMATIC[id]
       }
       rememberMode(id)
       try { theme.setTheme(id) } catch (error) {

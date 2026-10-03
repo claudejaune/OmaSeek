@@ -1,7 +1,8 @@
 # OmaThemes
 
-All 22 [Omarchy](https://omarchy.org) home-page themes as DeepSeek Harness themes, with a
-picker that follows the light/dark scheme and Omarchy's corner shapes.
+All 22 [Omarchy](https://omarchy.org) home-page themes as DeepSeek Harness themes — one list,
+light and dark together — plus whatever themes are installed on your own machine, with a picker
+that follows the light/dark scheme and Omarchy's corner shapes.
 
 One of three plugins in [OmaSeek](https://github.com/claudejaune/OmaSeek) — the others are the
 hero pixel field and the now-playing card. Each installs on its own.
@@ -15,7 +16,19 @@ pnpm dsh plugin --profile web add omaseek-themes               # running from a 
 
 Restart the harness, then look under **Settings → OmaThemes**. It opens on Catppuccin — Latte
 while the app is light, Catppuccin while it is dark — and remembers what you pick per scheme,
-across reloads. Picking Light or Dark keeps the harness's own palette for that scheme.
+across reloads. **Light** and **Dark** are that pair, one per scheme; the harness's own palettes
+are where they have always been, under **Settings → General → Appearance**.
+
+## Your own themes
+
+Every theme installed under `~/.config/omarchy/themes` is listed in the same grid, in the same
+card style and tagged **custom** — including the themes that only define terminal colours.
+Nothing is listed on a machine that is not Omarchy, and the 22 home-page themes are the whole
+picker there.
+
+If the harness runs on a different machine than the one your desktop is on, that list is empty
+and **Omarchy** still follows your desktop perfectly: the browser remembers every theme it sees
+the desktop wear, so the ones you use keep their card.
 
 ## Follow the desktop (optional)
 

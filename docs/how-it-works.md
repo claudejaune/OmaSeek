@@ -35,11 +35,18 @@ handed the resetting snapshot last, so a repair made during the dispatch is exac
 painted over — and with the Service already holding the wanted id, the picker would never
 repair again.
 
-**Opting out is a click.** The **Light** and **Dark** chips are the harness's own palettes,
-and choosing one for a scheme also tells the picker to stop painting over it — otherwise the
-automatic Catppuccin, or the desktop, would come straight back on the next scheme change. A
-theme card is a click of the same weight: it is a palette chosen by hand, so the chips move to
-the scheme it belongs to and the desktop stops having a say in it.
+**Light and Dark are the pair this package opens on.** Pressing one puts **Catppuccin Latte** or
+**Catppuccin** in force for that scheme, remembers it as that scheme's pick, and lights that
+card — pinned the way a card press pins one, so neither the automatic pair nor the desktop paints
+over it on the next scheme change. A theme card is a click of the same weight: it is a palette
+chosen by hand, so the chips move to the scheme it belongs to and the desktop stops having a say
+in it.
+
+The harness's own palettes are **the Appearance row's**, in General — they are not an Omarchy
+theme, so an Omarchy picker is not where they live. That row writes the same
+`light`/`dark`/`system` preference this picker reads, and a preference that arrives without one
+of these chips having set the mode first is read as what it is: Light or Dark there pins that
+scheme to the harness's own palette, System hands both schemes back to whatever is there.
 
 **System follows the desktop.** Where the [Omarchy Theme Sync][theme-sync] extension is
 installed, the **System** chip is renamed **Omarchy** — its tooltip reads "Automatically change
@@ -198,6 +205,17 @@ The platform gate is that filesystem and nothing else: a machine that is not Oma
 directory, so nothing is listed, and the 22 ports are the whole picker exactly as before. The
 badge the card wears is the one mark of where it came from — a port is this package's, a card
 with **custom** on it is the machine's.
+
+**The browser keeps its own list too, because the two machines are not always one.** Run the
+harness on one box and the browser on another — a server in a container, a laptop driving a
+desktop over the network — and the host's filesystem has none of your themes while following the
+desktop still works perfectly, because the extension reports into the *page*. So the page keeps
+what it has seen: every theme the desktop reports, with the colours that came with it, by slug
+and scheme, in `localStorage` under `omaseek.desktop` (forty of them, oldest out first, and a
+theme seen again after falling out is simply written back). They come back as cards on the next
+load — the same card, the same id, the same **custom** tag — which is also what lights up the
+card of the theme a desktop is wearing when no host could have listed it. Nowhere to write, no
+list; a machine that never reports a theme never grows one.
 
 ### OmaPixel — the hero
 

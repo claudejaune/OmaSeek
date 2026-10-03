@@ -396,6 +396,17 @@ function paletteWith(overrides) {
   return Object.assign(palette(), overrides)
 }
 
+/**
+ * Forty themes a page has already seen the desktop wear, oldest first, so the
+ * forty-first pushes the very first one out.
+ */
+const MANY_REMEMBERED = {}
+for (let i = 0; i < 40; i += 1) {
+  MANY_REMEMBERED[`past-${i}/dark`] = {
+    slug: `past-${i}`, scheme: 'dark', colors: REAL_COLORS, at: i + 1,
+  }
+}
+
 const THEMES = {
   themes: [
     // Catppuccin's real success and error, which sit 132 degrees apart: the pair
@@ -476,7 +487,45 @@ const PACKAGES = [
       { label: 'dark scheme, nothing chosen', scheme: 'dark', applied: 'omarchy-catppuccin', themes: 4 },
       { label: 'light scheme, nothing chosen', scheme: 'light', applied: 'omarchy-catppuccin-latte', themes: 4 },
       { label: 'a remembered choice', scheme: 'dark', stored: { dark: 'omarchy-tokyo-night' }, applied: 'omarchy-tokyo-night', themes: 4 },
-      { label: 'a remembered opt-out', scheme: 'dark', stored: { dark: 'base' }, applied: null, themes: 4 },
+      // The Appearance row's pin, remembered: that row is where the harness's
+      // own palette lives now, and it outlives the reload the way a pick does.
+      {
+        label: 'a scheme the Appearance row pinned to the harness palette',
+        scheme: 'dark', stored: { dark: 'base' }, applied: null, activeTheme: 'dark', themes: 4,
+      },
+      // Light and Dark here are the pair this package opens on, for that
+      // scheme, rather than the harness's own — pressing Light on a dark app
+      // puts Catppuccin Latte in force and lights its card.
+      {
+        label: 'pressing Light applies the pair, not the built-in palette',
+        scheme: 'dark', pressSchemeChip: 'Light',
+        chips: { Light: true, Dark: false },
+        appliedLast: 'omarchy-catppuccin-latte',
+        cards: { 'Catppuccin Latte': 1 },
+        cardTags: { 'Catppuccin Latte': 'active' },
+        themes: 4,
+      },
+      // And the Appearance row is read the other way round: a preference that
+      // arrives without a chip having set the mode first is that row asking for
+      // the harness's own palette, so it is what gets pinned.
+      {
+        label: 'the Appearance row takes the harness palette for that scheme',
+        scheme: 'dark', stored: { dark: 'omarchy-tokyo-night' },
+        outsidePreference: 'light',
+        chips: { Light: true, Dark: false },
+        activeTheme: 'light',
+        themes: 4,
+      },
+      // System from that row is the same statement as the follow chip: forget
+      // both schemes and follow whatever is there.
+      {
+        label: 'System in the Appearance row hands both schemes back',
+        scheme: 'dark', stored: { dark: 'base', light: 'base' },
+        outsidePreference: 'system',
+        chips: { System: true },
+        appliedLast: 'omarchy-catppuccin-latte',
+        themes: 4,
+      },
       // A settings write anywhere in the harness — picking a model writes the
       // default-model section — re-publishes the settings mirror, and ui-theme
       // adopts its durable preference over the picked palette. The palette has
@@ -967,6 +1016,53 @@ const PACKAGES = [
         appliedLast: 'omaseek-desktop-declared-light',
         themes: 5,
       },
+      // A theme only the browser ever sees — a harness running on another
+      // machine, whose filesystem has none of these themes — is kept so a later
+      // page can offer it as a card.
+      {
+        label: 'a theme the desktop reports is remembered',
+        scheme: 'system', extension: true,
+        desktop: { theme: 'my-theme', mode: 'dark' }, colors: REAL_COLORS,
+        expectRemembered: { has: ['my-theme/dark'] },
+        // Four ports, plus the live path's own registration for the theme it is
+        // wearing.
+        themes: 5,
+      },
+      // And comes back as a card, with a name from the slug the way Omarchy
+      // spells it.
+      {
+        label: 'a remembered theme is a card on the next page',
+        scheme: 'dark',
+        remembered: { 'my-theme/dark': { slug: 'my-theme', scheme: 'dark', colors: REAL_COLORS, at: 1 } },
+        cards: { 'My Theme': 1 },
+        cardTags: { 'My Theme': 'custom' },
+        expectSectionText: '5 themes \u00b7 1 installed',
+        themes: 5,
+      },
+      // The remembered card is the theme the desktop is wearing, not a second
+      // registration beside it: one id, so the card lights up.
+      {
+        label: 'a remembered theme is the card the desktop is wearing',
+        scheme: 'system', extension: true,
+        desktop: { theme: 'my-theme', mode: 'dark' }, colors: REAL_COLORS,
+        remembered: { 'my-theme/dark': { slug: 'my-theme', scheme: 'dark', colors: REAL_COLORS, at: 1 } },
+        applied: 'omaseek-desktop-my-theme-dark',
+        appliedLast: 'omaseek-desktop-my-theme-dark',
+        cards: { 'My Theme': 1 },
+        cardTags: { 'My Theme': 'active' },
+        themes: 5,
+      },
+      // The list is bounded: the 41st theme seen drops the oldest one.
+      {
+        label: 'the remembered list keeps the last forty',
+        scheme: 'system', extension: true,
+        desktop: { theme: 'my-theme', mode: 'dark' }, colors: REAL_COLORS,
+        remembered: MANY_REMEMBERED,
+        expectRemembered: { has: ['my-theme/dark'], absent: ['past-0/dark'], count: 40 },
+        // Forty cards from the cache, plus the live path's registration of the
+        // theme that pushed the first one out.
+        themes: 45,
+      },
     ],
   },
   {
@@ -1210,6 +1306,20 @@ function makeServices() {
     publish()
   }
 
+  /**
+   * A preference written from outside this picker — the Appearance row in
+   * General, which is the one control that sets `light`/`dark`/`system` without
+   * a chip here having set the mode first.
+   */
+  const adoptPreference = (next) => {
+    preference = next
+    activeId = next
+    publish()
+  }
+
+  /** The theme id in force, which is what the presenter paints `body` from. */
+  const active = () => activeId
+
   /** Take a listener last, the way ui-layout's token presenter does. */
   const observeLast = (fn) => { listeners.push(fn) }
 
@@ -1260,7 +1370,7 @@ function makeServices() {
       }
     },
   }
-  return { calls, ctx, adoptDurable, observeLast }
+  return { calls, ctx, adoptDurable, adoptPreference, active, observeLast }
 }
 
 function jsonResponse(value) {
@@ -1382,7 +1492,7 @@ function textsOf(component) {
 const isOurs = (id) => id.startsWith('omarchy-') || id.startsWith('omaseek-desktop-')
 
 async function runCase(pkg, testCase) {
-  const { calls, ctx, adoptDurable, observeLast } = makeServices()
+  const { calls, ctx, adoptDurable, adoptPreference, active, observeLast } = makeServices()
   calls.scheme = testCase.scheme === undefined ? 'dark' : testCase.scheme
   lastAudio = null
   store.clear()
@@ -1411,6 +1521,9 @@ async function runCase(pkg, testCase) {
     choices[scheme] = id
   }
   if (Object.keys(choices).length > 0) store.set('omaseek.themes', JSON.stringify(choices))
+  // The themes the last page saw the desktop wear — the card list a browser on
+  // one machine keeps for a harness running on another.
+  if (testCase.remembered !== undefined) store.set('omaseek.desktop', JSON.stringify(testCase.remembered))
   // OmaPixel's two switches, as a reader left them before this page load.
   if (testCase.pixel !== undefined) store.set('omaseek.pixel', JSON.stringify(testCase.pixel))
   // What the last page left in `omaseek.music`: the fold, the song, and the
@@ -1516,6 +1629,32 @@ async function runCase(pkg, testCase) {
     await new Promise((done) => setTimeout(done, 10))
   }
 
+  // A press on one of the scheme chips: Light and Dark are the pair this
+  // package opens on, Omarchy (or System without the extension) follows.
+  if (testCase.pressSchemeChip !== undefined) {
+    const section = calls.registered.find((entry) => entry.options.name === 'settings.section')
+    const chips = section === undefined ? [] : nodesOf(React.createElement(section.component, {}))
+    const chip = chips.find((node) => typeof node.props.className === 'string'
+      && node.props.className.split(' ').includes('omaseek-chip')
+      && node.children[0] === testCase.pressSchemeChip)
+    if (chip === undefined) problems.push(`no "${testCase.pressSchemeChip}" scheme chip on the settings page`)
+    else {
+      try {
+        chip.props.onClick()
+      } catch (error) {
+        problems.push(`pressing "${testCase.pressSchemeChip}" threw: ${error.message}`)
+      }
+    }
+    await new Promise((done) => setTimeout(done, 10))
+  }
+
+  // A preference written from outside this picker: the Appearance row in
+  // General, which is the harness's own palette and its own scheme.
+  if (testCase.outsidePreference !== undefined) {
+    adoptPreference(testCase.outsidePreference)
+    await new Promise((done) => setTimeout(done, 10))
+  }
+
   const wanted = pkg.expect
   const expectedThemes = testCase.themes === undefined ? wanted.themes : testCase.themes
   if (expectedThemes !== undefined && calls.themeRegistrations.length !== expectedThemes) {
@@ -1552,6 +1691,33 @@ async function runCase(pkg, testCase) {
     const last = applied[applied.length - 1]
     if (last !== testCase.appliedLast) {
       problems.push(`left "${last}" in force, expected "${testCase.appliedLast}"`)
+    }
+  }
+
+  // The theme the presenter is actually painting from — a built-in id when the
+  // harness's own palette is what is in force, which is the only way to tell
+  // that a pin took effect rather than another Omarchy theme.
+  if (testCase.activeTheme !== undefined) {
+    const id = active()
+    if (id !== testCase.activeTheme) {
+      problems.push(`"${id}" is in force, expected "${testCase.activeTheme}"`)
+    }
+  }
+
+  // What the page left in `omaseek.desktop`: the themes it saw the desktop wear.
+  if (testCase.expectRemembered !== undefined) {
+    const raw = store.get('omaseek.desktop')
+    const held = raw === undefined ? {} : JSON.parse(raw)
+    const keys = Object.keys(held)
+    for (const key of testCase.expectRemembered.has === undefined ? [] : testCase.expectRemembered.has) {
+      if (!keys.includes(key)) problems.push(`"${key}" was not remembered (held: ${keys.join(', ') || 'nothing'})`)
+    }
+    for (const key of testCase.expectRemembered.absent === undefined ? [] : testCase.expectRemembered.absent) {
+      if (keys.includes(key)) problems.push(`"${key}" is still remembered where it should have been dropped`)
+    }
+    const count = testCase.expectRemembered.count
+    if (count !== undefined && keys.length !== count) {
+      problems.push(`${keys.length} themes remembered, expected ${count}`)
     }
   }
 

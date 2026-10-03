@@ -59,6 +59,17 @@ All notable changes to this project will be documented in this file.
 
 ## omaseek-themes
 
+### 0.3.1 - 2026-10-03
+
+#### Changed
+
+- The Light and Dark buttons now select Catppuccin Latte and Catppuccin — the themes the plugin opens on — instead of the harness's built-in palettes
+- The harness's own light and dark palettes stay where they belong, in Settings → General → Appearance
+
+#### Added
+
+- A theme you use from your desktop keeps its card even when the harness runs on a different machine
+
 ### 0.3.0 - 2026-10-03
 
 #### Added

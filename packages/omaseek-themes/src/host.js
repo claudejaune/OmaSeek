@@ -25,6 +25,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { fileSize, listDirectory, readText } from './files.js'
+import { prettyName } from './slug.js'
 
 /** The research doc, located beside the package rather than at a fixed path. */
 const DOC_URL = new URL('../themes.md', import.meta.url)
@@ -262,13 +263,6 @@ async function readPalette(ctx, path, legacy) {
   if (size === 0 || size > MAX_PALETTE_BYTES) return null
   const text = await readText(ctx, path)
   return legacy ? fromAlacritty(text) : pairs(text)
-}
-
-/** The theme names `omarchy theme list` prints, out of the slugs it lists. */
-function prettyName(slug) {
-  return slug
-    .replace(/(^|-)([a-z])/g, function (match, lead, letter) { return lead + letter.toUpperCase() })
-    .replace(/-/g, ' ')
 }
 
 /**
