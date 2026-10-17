@@ -47,6 +47,12 @@ All notable changes to this project will be documented in this file.
 
 ## omaseek-pixel
 
+### 0.2.1 - 2026-10-17
+
+#### Changed
+
+- The Pixel field twinkle animations are 4x slower (and therefore less distracting)
+
 ### 0.2.0 - 2026-09-16
 
 #### Added

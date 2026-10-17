@@ -309,6 +309,14 @@ var CELLS_PER_NOISE = 9
 var CURSOR_CELLS = 12
 /** Frame throttle: the site repaints at most every 25 ms. */
 var FRAME_MS = 25
+/**
+ * Ambient clock rate: the drifting noise and the twinkle over it run at a
+ * quarter of the site's pace, which reads as calm rather than busy. The
+ * interaction timing below is untouched — a press still grows and a glow still
+ * follows the pointer in real time, or the field would feel laggy instead of
+ * calm.
+ */
+var AMBIENT_RATE = 1 / 4
 /** Press charge: a full second and a change is a big stamp. */
 var CHARGE_TIME = 1.1
 var CHARGE_FROM = 0.45
@@ -613,7 +621,9 @@ function mountField(host, live) {
   }
 
   function draw(time) {
-    var t = reduced ? 0 : time / 1000
+    // Only the ambient terms read this clock; stamps and the cursor glow keep
+    // their own real-time timing.
+    var t = reduced ? 0 : (time / 1000) * AMBIENT_RATE
     strength += (targetStrength - strength) * 0.3
 
     g.clearRect(0, 0, width, height)
