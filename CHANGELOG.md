@@ -65,6 +65,13 @@ All notable changes to this project will be documented in this file.
 
 ## omaseek-themes
 
+### 0.3.2 - 2026-10-19
+
+#### Fixed
+
+- The Squircle/Square corner choice persists across page refreshes (fixes https://github.com/claudejaune/OmaSeek/issues/1)
+- The chosen theme no longer resets to the harness default on page refresh
+
 ### 0.3.1 - 2026-10-03
 
 #### Changed

@@ -26,6 +26,23 @@ forgotten on every reload. The picker keeps its own note in `localStorage` under
 the desktop** below for why the preference, too. Clearing site data, or pressing **System**,
 returns both schemes to automatic.
 
+**The harness reports its default first.** A fresh page reads `theme.getTheme().preference` as
+the harness's own default — `system` — because the durable preference only arrives when the
+settings mirror comes back over the wire, which is after every boot Plugin has already run. So
+the scheme the picker opens on is read from its own note rather than from that first answer, and
+the adoption that follows is read as the harness catching up, not as a press of the Appearance
+row. That distinction is the whole of it: a press is the one thing allowed to forget a slot, and
+reading the late adoption as one is what wiped the pick on every reload. Any scheme the picker
+settles on for itself writes the durable preference as well, so the two never disagree about
+which scheme is in force — and a settings write that re-adopts what the picker already wrote is
+the harness agreeing with it.
+
+**The corner shape rides in the same record**, under `corners`, and is written only when a
+reader presses one of the two chips. Writing it on load instead would pin the shipped default
+into storage as though somebody had chosen it — and a stored value reads back as a choice, so
+the default could never be changed again. A record naming a shape that is neither `squircle`
+nor `square` falls back to the default rather than reaching the sheet lookup.
+
 **And it survives a settings write.** Writing *any* settings section — picking a model writes
 the default-model one — republishes the settings mirror, and the harness answers by adopting
 its durable `light`/`dark`/`system` preference over the picked palette. The picker puts its

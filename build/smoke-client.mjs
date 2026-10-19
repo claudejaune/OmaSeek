@@ -536,6 +536,65 @@ const PACKAGES = [
         scheme: 'dark', stored: { dark: 'omarchy-tokyo-night' }, applied: 'omarchy-tokyo-night',
         settingsWrite: true, themes: 4,
       },
+      // The load order the harness actually has: the Service answers a fresh
+      // page with its own default and adopts the durable preference only once
+      // the settings mirror comes back, which is after every Plugin has run.
+      // That late adoption is not a press of the Appearance row, and must not
+      // read as one — it is what used to forget the pick on every reload.
+      {
+        label: 'the durable preference landing late keeps the pick',
+        scheme: 'system', durable: 'dark', stored: { dark: 'omarchy-tokyo-night', mode: 'dark' },
+        applied: 'omarchy-tokyo-night', chips: { Dark: true, System: false },
+        settingsWrite: true, themes: 4,
+      },
+      // Same adoption, one step later: a pick stored under System is mended to
+      // its own scheme, and the mended scheme has to reach the harness too or
+      // the next settings write lands as a System press and deletes both slots.
+      {
+        label: 'a mended scheme survives the settings write that follows it',
+        scheme: 'system', osDark: true, durable: 'system',
+        stored: { dark: 'omarchy-tokyo-night', mode: 'system' },
+        applied: 'omarchy-tokyo-night',
+        expectChoices: { has: { dark: 'omarchy-tokyo-night', mode: 'dark' } },
+        settingsWrite: true, themes: 4,
+      },
+      // The Appearance row still wins when it really is pressed: a preference
+      // that arrives after this Plugin wrote its own is that row asking for the
+      // harness palette, and the fix above must not swallow it.
+      {
+        label: 'the Appearance row still pins its scheme over a remembered pick',
+        scheme: 'dark', durable: 'dark', stored: { dark: 'omarchy-tokyo-night', mode: 'dark' },
+        outsidePreference: 'light', chips: { Light: true, Dark: false },
+        activeTheme: 'light', themes: 4,
+      },
+      // Corners: a reader who never touched the row leaves nothing behind. A
+      // default written to storage on a load nobody chose anything on is a
+      // default that can never be changed again, because a stored value reads
+      // back as a deliberate pick.
+      {
+        label: 'an untouched load stores no corner shape',
+        scheme: 'dark', applied: 'omarchy-catppuccin',
+        chips: { Square: true, Squircle: false },
+        expectChoices: { empty: true }, themes: 4,
+      },
+      {
+        label: 'a corner press is remembered, and worn on the next load',
+        scheme: 'dark', applied: 'omarchy-catppuccin', pressCornerChip: 'Squircle',
+        chips: { Squircle: true, Square: false },
+        expectChoices: { has: { corners: 'squircle' } }, themes: 4,
+      },
+      {
+        label: 'a remembered corner shape is the one worn',
+        scheme: 'dark', stored: { corners: 'squircle' }, applied: 'omarchy-catppuccin',
+        chips: { Squircle: true, Square: false },
+        expectChoices: { has: { corners: 'squircle' } }, themes: 4,
+      },
+      // A corrupt record cannot reach CORNER_SHEET with an unknown key in it.
+      {
+        label: 'a corner shape that names nothing falls back to the default',
+        scheme: 'dark', stored: { corners: 'roundness' }, applied: 'omarchy-catppuccin',
+        chips: { Square: true, Squircle: false }, themes: 4,
+      },
       // System with the Omarchy Theme Sync extension installed and reporting:
       // the scheme comes from the desktop's own colors.toml, and the palette is
       // this package's port of the theme Omarchy names with that slug. The chip
@@ -1256,6 +1315,19 @@ function makeServices() {
   // there, and the stub has to model it or a Plugin reading the preference
   // instead of the resolved palette would see a harness nobody runs.
   let preference
+  // What the Host's settings document actually holds. Only a built-in
+  // preference is durable — a picked theme id is in-memory, and it is what the
+  // harness answers a settings write by adopting *over* — so this moves only
+  // when a built-in is written, and `adoptDurable` hands back exactly this. A
+  // case sets it apart from the boot preference to model the real load order:
+  // the Service reports its own default first, then adopts the durable one
+  // once the settings mirror comes back, which is after every Plugin has run.
+  // Read lazily, because the case fills in `calls` after the services are built.
+  let durable
+  const heldDurable = () => (durable === undefined
+    ? (calls.durable === undefined ? calls.scheme : calls.durable)
+    : durable)
+  const BUILT_IN = ['light', 'dark', 'system']
   let activeId = 'dark'
   const snapshot = () => ({
     preference: preference === undefined ? calls.scheme : preference,
@@ -1295,14 +1367,17 @@ function makeServices() {
       calls.themeSet.push(id)
       preference = id
       activeId = id
+      // The real Service writes the settings scope only for a built-in; a
+      // registered theme id is in-memory and is what the next adoption erases.
+      if (BUILT_IN.indexOf(id) >= 0) durable = id
       publish()
     },
   }
 
   /** What ui-theme's `adopt()` does when any settings write re-publishes the scope. */
   const adoptDurable = () => {
-    preference = calls.scheme
-    activeId = calls.scheme
+    preference = heldDurable()
+    activeId = heldDurable()
     publish()
   }
 
@@ -1314,6 +1389,9 @@ function makeServices() {
   const adoptPreference = (next) => {
     preference = next
     activeId = next
+    // The Appearance row writes the settings scope, so the durable preference
+    // moves with it — which is what makes a later adoption agree with it.
+    durable = next
     publish()
   }
 
@@ -1494,6 +1572,7 @@ const isOurs = (id) => id.startsWith('omarchy-') || id.startsWith('omaseek-deskt
 async function runCase(pkg, testCase) {
   const { calls, ctx, adoptDurable, adoptPreference, active, observeLast } = makeServices()
   calls.scheme = testCase.scheme === undefined ? 'dark' : testCase.scheme
+  calls.durable = testCase.durable
   lastAudio = null
   store.clear()
   // The page as this case finds it: no listeners from the last one, no desktop
@@ -1631,20 +1710,32 @@ async function runCase(pkg, testCase) {
 
   // A press on one of the scheme chips: Light and Dark are the pair this
   // package opens on, Omarchy (or System without the extension) follows.
-  if (testCase.pressSchemeChip !== undefined) {
+  // Press a chip on the settings page by its label. The scheme chips and the
+  // corner chips are the same control, so one finder serves both.
+  const pressChip = (label) => {
     const section = calls.registered.find((entry) => entry.options.name === 'settings.section')
     const chips = section === undefined ? [] : nodesOf(React.createElement(section.component, {}))
     const chip = chips.find((node) => typeof node.props.className === 'string'
       && node.props.className.split(' ').includes('omaseek-chip')
-      && node.children[0] === testCase.pressSchemeChip)
-    if (chip === undefined) problems.push(`no "${testCase.pressSchemeChip}" scheme chip on the settings page`)
-    else {
-      try {
-        chip.props.onClick()
-      } catch (error) {
-        problems.push(`pressing "${testCase.pressSchemeChip}" threw: ${error.message}`)
-      }
+      && node.children[0] === label)
+    if (chip === undefined) {
+      problems.push(`no "${label}" chip on the settings page`)
+      return
     }
+    try {
+      chip.props.onClick()
+    } catch (error) {
+      problems.push(`pressing "${label}" threw: ${error.message}`)
+    }
+  }
+
+  if (testCase.pressSchemeChip !== undefined) {
+    pressChip(testCase.pressSchemeChip)
+    await new Promise((done) => setTimeout(done, 10))
+  }
+
+  if (testCase.pressCornerChip !== undefined) {
+    pressChip(testCase.pressCornerChip)
     await new Promise((done) => setTimeout(done, 10))
   }
 
@@ -1701,6 +1792,26 @@ async function runCase(pkg, testCase) {
     const id = active()
     if (id !== testCase.activeTheme) {
       problems.push(`"${id}" is in force, expected "${testCase.activeTheme}"`)
+    }
+  }
+
+  // What the page left in `omaseek.themes`: the scheme slots, the mirrored
+  // preference, and the corner pick. `absent` is the half that matters for a
+  // default — a value written on a load where nobody chose anything is a
+  // default pinned into storage, which outlives the default itself.
+  if (testCase.expectChoices !== undefined) {
+    const raw = store.get('omaseek.themes')
+    const held = raw === undefined ? {} : JSON.parse(raw)
+    for (const [key, value] of Object.entries(testCase.expectChoices.has === undefined ? {} : testCase.expectChoices.has)) {
+      if (held[key] !== value) {
+        problems.push(`omaseek.themes ${key} is ${JSON.stringify(held[key])}, expected ${JSON.stringify(value)}`)
+      }
+    }
+    for (const key of testCase.expectChoices.absent === undefined ? [] : testCase.expectChoices.absent) {
+      if (held[key] !== undefined) problems.push(`omaseek.themes ${key} is ${JSON.stringify(held[key])} where nothing should be stored`)
+    }
+    if (testCase.expectChoices.empty === true && raw !== undefined) {
+      problems.push(`omaseek.themes holds ${raw} where nothing should have been written`)
     }
   }
 

@@ -1079,6 +1079,10 @@ function applyFeature(host) {
   /** `{ light: id | 'base', dark: … }` — a missing slot means "automatic". */
   var choices = loadChoices()
 
+  // The corner pick lives in the same record as the palette picks. The type
+  // check keeps a hand-edited or corrupt record out of CORNER_SHEET[mode].
+  if (choices.corners === 'squircle' || choices.corners === 'square') state.corners = choices.corners
+
   function loadChoices() {
     try {
       var raw = window.localStorage.getItem(STORAGE_KEY)
@@ -1161,7 +1165,9 @@ function applyFeature(host) {
    * system the moment the picker paints anything, while the durable preference
    * the reader actually chose is unchanged. The only way to keep knowing it is
    * to write it down whenever it is visible; a stored value covers the window
-   * after our own write, where the preference is a theme id again.
+   * after our own write, where the preference is a theme id again — and at load
+   * it wins outright, because the live one is only the harness's default there.
+   * See `adoptMode`.
    */
   var mode = adoptMode(theme.getTheme().preference)
 
@@ -1170,9 +1176,19 @@ function applyFeature(host) {
   var graceTimer = null
 
   function adoptMode(preference) {
-    if (PREFERENCES.indexOf(preference) >= 0) return preference
+    // Our own memory first, and the live preference only as the fallback.
+    //
+    // The harness answers a fresh page from its own default — `system` — and
+    // adopts the durable preference only once the settings mirror has come back
+    // over the wire, which is after every boot Plugin has already run. So the
+    // preference readable here is the one the harness started with, not the one
+    // the reader chose. Trusting it throws away the scheme this Plugin
+    // remembered, and the adoption that follows then lands as a preference that
+    // is not the mode being held — which is exactly how the change listener
+    // reads a press of the Appearance row, and a press is what forgets a slot.
     var stored = choices.mode
-    return PREFERENCES.indexOf(stored) >= 0 ? stored : 'system'
+    if (PREFERENCES.indexOf(stored) >= 0) return stored
+    return PREFERENCES.indexOf(preference) >= 0 ? preference : 'system'
   }
 
   function rememberMode(next) {
@@ -1421,7 +1437,21 @@ function applyFeature(host) {
     // the reader is on. The first cut of following the desktop left exactly
     // that state behind in a stored pick, so it is mended here, once, on the
     // first resolve that knows which scheme the pick belongs to.
-    if (mode === 'system' && picked(scheme)) rememberMode(scheme)
+    if (mode === 'system' && picked(scheme)) {
+      rememberMode(scheme)
+      // The durable half has to move with it, for the same reason `choose()`
+      // writes it: a scheme this Plugin settled on without telling the harness
+      // is a scheme whose next re-adoption arrives as a preference that is not
+      // the mode being held, and the change listener can only read that as a
+      // press of the Appearance row — which is the one thing allowed to forget a
+      // slot. Writing it here is what keeps the harness's preference and this
+      // Plugin's mode telling the same story from the first resolve on.
+      try {
+        theme.setTheme(scheme)
+      } catch (unregistered) {
+        // A built-in preference is always registered; nothing to recover from.
+      }
+    }
     var wanted = wantedFor(scheme)
     if (wanted === null) return
     var snapshot = theme.getTheme()
@@ -1759,7 +1789,13 @@ function applyFeature(host) {
           className: 'omaseek-chip',
           type: 'button',
           'data-on': state.corners === shape ? '1' : '0',
-          onClick: function () { setCorners(shape) },
+          onClick: function () {
+            // Persist only a reader's own press, so the load-time
+            // setCorners(state.corners) never pins the default into storage.
+            choices.corners = shape
+            saveChoices()
+            setCorners(shape)
+          },
         }, CORNER_LABELS[shape])
       })))
 
