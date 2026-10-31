@@ -65,6 +65,12 @@ All notable changes to this project will be documented in this file.
 
 ## omaseek-themes
 
+### 0.3.3 - 2026-10-31
+
+#### Fixed
+
+- The chosen theme no longer resets on page refresh
+
 ### 0.3.2 - 2026-10-19
 
 #### Fixed

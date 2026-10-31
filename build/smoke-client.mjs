@@ -1352,6 +1352,12 @@ function makeServices() {
       }
       calls.themeRegistrations.push(definition)
       schemeOf.set(definition.id, definition.colorScheme)
+      // The real Service publishes on every registration, not just on a
+      // preference write. That is how a fresh page's default preference reaches
+      // a Plugin's change listener from the Plugin's own registrations, before
+      // the settings mirror has landed — the half of the harness's boot order
+      // a silent stub could never show.
+      publish()
       return () => {
         // Disposing the theme backing the active preference resets it to the
         // default. That is why a desktop switch registers a new theme and

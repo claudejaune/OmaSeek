@@ -1423,6 +1423,24 @@ function applyFeature(host) {
   }
 
   /**
+   * Whether this Package has resolved its scheme once on this page.
+   *
+   * The harness answers a fresh page with its own `system` default, and the
+   * Service publishes that default on every `register` — so this Plugin's own
+   * registrations hand it to the change listener before the settings mirror
+   * has come back — and only adopts the durable preference the reader actually
+   * chose once the mirror lands. Neither half of that boot order is a press of
+   * the Appearance row, and a press is the one thing allowed to forget a slot,
+   * so the listener ignores preferences until the first resolve below: from
+   * that moment on the mode held here and the durable preference tell the same
+   * story, and anything moving the preference apart from it is the row.
+   * Resolved, not painted — a scheme pinned to the harness palette paints
+   * nothing, and a window that never opened there would swallow the row's
+   * next press.
+   */
+  var resolved = false
+
+  /**
    * Put the scheme's palette in force. Called when the palettes arrive, when
    * the scheme flips, and when the desktop reports — and never in a loop:
    * applying what is already active is the one case that returns early, and
@@ -1431,6 +1449,9 @@ function applyFeature(host) {
   function applyForScheme() {
     if (state.loading || state.error !== '') return
     if (waitingForDesktop()) return
+    // The boot window closes here, whatever this resolve goes on to paint —
+    // even nothing, which is a resolve the reader chose on purpose.
+    resolved = true
     var scheme = schemeInForce()
     // A slot chosen while System was lit is a scheme statement in its own
     // right — the desktop is not driving that palette, so System is not what
@@ -1643,14 +1664,20 @@ function applyFeature(host) {
       // own palettes. Read it that way — Light or Dark there pins that scheme to
       // the harness palette, System hands both schemes back to the desktop —
       // or the row would set a preference this picker then paints over.
+      //
+      // But only once this Package has resolved once: before that, both halves
+      // of the harness's boot order are still landing, and a preference that
+      // arrives in that window is that adoption, not the row. See `resolved`.
       if (PREFERENCES.indexOf(snapshot.preference) >= 0 && snapshot.preference !== mode) {
-        if (snapshot.preference === 'system') {
-          delete choices.light
-          delete choices.dark
-        } else {
-          choices[snapshot.preference] = HARNESS
+        if (resolved) {
+          if (snapshot.preference === 'system') {
+            delete choices.light
+            delete choices.dark
+          } else {
+            choices[snapshot.preference] = HARNESS
+          }
+          rememberMode(snapshot.preference)
         }
-        rememberMode(snapshot.preference)
       }
       repair()
     })
