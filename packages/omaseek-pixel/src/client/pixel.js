@@ -343,9 +343,12 @@ function isControl(target) {
  * One field on one host, for as long as that host is the New Session hero.
  * @param host - the conversation root, in its `hero` phase.
  * @param live - whether the pointer may light and stamp (mode `interactive`).
+ * @param onStale - called when the host stops being the hero it mounted on;
+ *   the field releases itself rather than wait for an outside observer that
+ *   may have missed the transition (a mount must never outlive its hero).
  * @returns disposer taking the canvas and every listener back out.
  */
-function mountField(host, live) {
+function mountField(host, live, onStale) {
   var canvas = document.createElement('canvas')
   canvas.className = 'omapixel-field'
   canvas.setAttribute('aria-hidden', 'true')
@@ -357,6 +360,14 @@ function mountField(host, live) {
       host.classList.remove('omapixel-field-host')
       canvas.remove()
     }
+  }
+
+  // The field belongs to the hero this host was showing when it mounted.
+  // Once the host stops being that hero — the conversation bound, the root
+  // was replaced — the field releases itself on its next tick, whatever the
+  // outside observer saw or missed.
+  function stale() {
+    return !host.isConnected || host.getAttribute('data-phase') !== 'hero'
   }
 
   var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -567,6 +578,9 @@ function mountField(host, live) {
   var frame = 0
   var lastDraw = 0
   function loop(now) {
+    // Checked before re-arming: a stale field stops its own loop and hands
+    // the teardown to syncField, which unmounts (or follows a new hero).
+    if (stale()) { onStale(); return }
     frame = requestAnimationFrame(loop)
     if (now - lastDraw < FRAME_MS) return
     lastDraw = now
@@ -627,6 +641,9 @@ function mountField(host, live) {
   var observers = []
   if (typeof ResizeObserver !== 'undefined') {
     var resize = new ResizeObserver(function () {
+      // A resize can land in the same tick as the phase flip; drawing then
+      // would paint one stale frame after the hero was gone.
+      if (stale()) { onStale(); return }
       if (!measure()) return
       // Repaint in the same tick: waiting for the throttled frame would
       // leave a just-cleared buffer on screen mid-resize.
@@ -883,7 +900,7 @@ export function applyFeature(host) {
     if (host === null) return
     fieldHost = host
     fieldLive = live
-    fieldOff = mountField(host, live)
+    fieldOff = mountField(host, live, syncField)
   }
 
   function setFieldMode(mode) {
@@ -935,28 +952,32 @@ export function applyFeature(host) {
     notify()
   }
 
+  // Mutations and theme swaps are coalesced into one check per frame, so the
+  // observer and the palette seam share one rAF and can never interleave a
+  // mount around each other. The hero-field effect owns the flag that stops
+  // the coalescer once the field is torn down.
+  var queued = false
+  var pending = 0
+  var alive = true
+  function check() {
+    if (queued) return
+    queued = true
+    if (typeof requestAnimationFrame !== 'function') { queued = false; syncField(); syncTyper(); return }
+    pending = requestAnimationFrame(function () {
+      queued = false
+      // Effects dispose in reverse order, so this callback can still be in
+      // flight after the teardown effect released the field: running it then
+      // would mount a second canvas and its listeners on a stopped plugin.
+      if (!alive) return
+      syncField()
+      syncTyper()
+    })
+  }
+
   ctx.effect(function () {
     if (typeof document === 'undefined') return function () {}
     // The hero comes and goes with the route and with the first message,
     // so the field follows the DOM rather than a list of lifecycle hooks.
-    // Mutations are coalesced into one check per frame.
-    var queued = false
-    var pending = 0
-    var live = true
-    function check() {
-      if (queued) return
-      queued = true
-      if (typeof requestAnimationFrame !== 'function') { queued = false; syncField(); syncTyper(); return }
-      pending = requestAnimationFrame(function () {
-        queued = false
-        // Effects dispose in reverse order, so this callback can still be in
-        // flight after the teardown effect released the field: running it then
-        // would mount a second canvas and its listeners on a stopped plugin.
-        if (!live) return
-        syncField()
-        syncTyper()
-      })
-    }
     var watcher = null
     if (typeof MutationObserver !== 'undefined') {
       watcher = new MutationObserver(check)
@@ -966,7 +987,7 @@ export function applyFeature(host) {
     }
     check()
     return function () {
-      live = false
+      alive = false
       if (pending !== 0) cancelAnimationFrame(pending)
       if (watcher !== null) watcher.disconnect()
     }
@@ -974,9 +995,13 @@ export function applyFeature(host) {
 
   ctx.effect(function () {
     // A theme swap changes the field's inks: remount, which re-reads them.
-    // This is the whole seam to OmaThemes — the field simply follows whatever
-    // palette the page carries, and works unchanged when OmaThemes is absent.
-    return ctx.on('theme/change', function () { fieldHost = null; syncField() })
+    // The remount rides the shared rAF rather than the dispatch itself — the
+    // token presenter is another listener on this same event, and reading the
+    // palette synchronously could step the field off the palette the page is
+    // still leaving. This is the whole seam to OmaThemes — the field simply
+    // follows whatever palette the page carries, and works unchanged when
+    // OmaThemes is absent.
+    return ctx.on('theme/change', function () { fieldHost = null; check() })
   }, 'omapixel: field palette')
 
   ctx.effect(function () {

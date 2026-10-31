@@ -47,6 +47,12 @@ All notable changes to this project will be documented in this file.
 
 ## omaseek-pixel
 
+### 0.2.2 - 2026-10-31
+
+#### Fixed
+
+- The pixel field no longer lingers in the background of an existing session after navigating from the New Session page
+
 ### 0.2.1 - 2026-10-17
 
 #### Changed
